@@ -31,6 +31,7 @@ const sttOnlineLanguageOptions = [
 const sttOnlineProviderOptions = [
   { value: 'openai-compatible', label: 'OpenAI 兼容' },
   { value: 'aliyun-qwen-asr', label: '阿里云 Qwen-ASR' },
+  { value: 'xiaomi-mimo-asr', label: '小米 MiMo ASR' },
   { value: 'custom', label: '自定义接口' }
 ] as const
 
@@ -43,6 +44,10 @@ const STT_ONLINE_DEFAULTS = {
     baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen3-asr-flash'
   },
+  'xiaomi-mimo-asr': {
+    baseURL: 'https://api.xiaomimimo.com/v1',
+    model: 'mimo-v2.5-asr'
+  },
   custom: {
     baseURL: '',
     model: ''
@@ -51,7 +56,7 @@ const STT_ONLINE_DEFAULTS = {
 
 const DOWNLOAD_PAUSED_MESSAGE = '下载已暂停'
 type SttMode = 'cpu' | 'gpu' | 'online'
-type SttOnlineProvider = 'openai-compatible' | 'aliyun-qwen-asr' | 'custom'
+type SttOnlineProvider = 'openai-compatible' | 'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | 'custom'
 
 interface SttTabProps {
   active: boolean
@@ -131,19 +136,16 @@ function SttTab({ active, showMessage }: SttTabProps) {
   const handleSttOnlineProviderChange = (provider: SttOnlineProvider) => {
     setSttOnlineProvider(provider)
 
-    if (provider === 'aliyun-qwen-asr') {
-      if (!sttOnlineBaseURL || sttOnlineBaseURL === STT_ONLINE_DEFAULTS['openai-compatible'].baseURL) {
-        setSttOnlineBaseURL(STT_ONLINE_DEFAULTS['aliyun-qwen-asr'].baseURL)
+    const defaults = STT_ONLINE_DEFAULTS[provider]
+    if (defaults) {
+      const otherDefaults = Object.entries(STT_ONLINE_DEFAULTS)
+        .filter(([k]) => k !== provider)
+        .map(([, v]) => v)
+      if (!sttOnlineBaseURL || otherDefaults.some(d => d.baseURL === sttOnlineBaseURL)) {
+        setSttOnlineBaseURL(defaults.baseURL)
       }
-      if (!sttOnlineModel || sttOnlineModel === STT_ONLINE_DEFAULTS['openai-compatible'].model) {
-        setSttOnlineModel(STT_ONLINE_DEFAULTS['aliyun-qwen-asr'].model)
-      }
-    } else if (provider === 'openai-compatible') {
-      if (!sttOnlineBaseURL || sttOnlineBaseURL === STT_ONLINE_DEFAULTS['aliyun-qwen-asr'].baseURL) {
-        setSttOnlineBaseURL(STT_ONLINE_DEFAULTS['openai-compatible'].baseURL)
-      }
-      if (!sttOnlineModel || sttOnlineModel === STT_ONLINE_DEFAULTS['aliyun-qwen-asr'].model) {
-        setSttOnlineModel(STT_ONLINE_DEFAULTS['openai-compatible'].model)
+      if (!sttOnlineModel || otherDefaults.some(d => d.model === sttOnlineModel)) {
+        setSttOnlineModel(defaults.model)
       }
     }
   }
@@ -888,7 +890,9 @@ function SttTab({ active, showMessage }: SttTabProps) {
                 ? '选择 OpenAI 兼容时会自动补全标准路径'
                 : sttOnlineProvider === 'aliyun-qwen-asr'
                   ? '阿里云走 DashScope 兼容入口，但内部使用 chat/completions + input_audio 协议'
-                  : '自定义接口会直接使用你填写的完整 URL'}
+                  : sttOnlineProvider === 'xiaomi-mimo-asr'
+                    ? '小米 MiMo ASR 使用 chat/completions + input_audio 协议，支持中英及多种方言'
+                    : '自定义接口会直接使用你填写的完整 URL'}
             </span>
             <SegmentedControl<SttOnlineProvider>
               value={sttOnlineProvider}
@@ -905,7 +909,9 @@ function SttTab({ active, showMessage }: SttTabProps) {
                 ? '支持填写完整接口 URL，如 `https://api.openai.com/v1/audio/transcriptions`；也兼容只填 `/v1` 基地址'
                 : sttOnlineProvider === 'aliyun-qwen-asr'
                   ? '建议填写 DashScope 兼容入口，如 `https://dashscope.aliyuncs.com/compatible-mode/v1`'
-                  : '请输入完整接口 URL，系统会按你填写的地址原样发起请求'}
+                  : sttOnlineProvider === 'xiaomi-mimo-asr'
+                    ? '建议填写 MiMo API 基地址，如 `https://api.xiaomimimo.com/v1`'
+                    : '请输入完整接口 URL，系统会按你填写的地址原样发起请求'}
             </span>
             <input
               type="text"
@@ -916,7 +922,9 @@ function SttTab({ active, showMessage }: SttTabProps) {
                   ? 'https://api.openai.com/v1/audio/transcriptions'
                   : sttOnlineProvider === 'aliyun-qwen-asr'
                     ? 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-                    : 'https://your-api.example.com/full/path'
+                    : sttOnlineProvider === 'xiaomi-mimo-asr'
+                      ? 'https://api.xiaomimimo.com/v1'
+                      : 'https://your-api.example.com/full/path'
               }
             />
           </div>
@@ -937,13 +945,21 @@ function SttTab({ active, showMessage }: SttTabProps) {
             <span className="form-hint">
               {sttOnlineProvider === 'aliyun-qwen-asr'
                 ? '阿里云当前可用模型为 `qwen3-asr-flash` 与 `qwen3-asr-flash-filetrans`，默认使用 `qwen3-asr-flash`'
-                : '默认使用 `gpt-4o-mini-transcribe`，也可替换为兼容模型名'}
+                : sttOnlineProvider === 'xiaomi-mimo-asr'
+                  ? '小米当前可用模型为 `mimo-v2.5-asr`'
+                  : '默认使用 `gpt-4o-mini-transcribe`，也可替换为兼容模型名'}
             </span>
             <input
               type="text"
               value={sttOnlineModel}
               onChange={(e) => setSttOnlineModel(e.target.value)}
-              placeholder={sttOnlineProvider === 'aliyun-qwen-asr' ? 'qwen3-asr-flash' : 'gpt-4o-mini-transcribe'}
+              placeholder={
+                sttOnlineProvider === 'aliyun-qwen-asr'
+                  ? 'qwen3-asr-flash'
+                  : sttOnlineProvider === 'xiaomi-mimo-asr'
+                    ? 'mimo-v2.5-asr'
+                    : 'gpt-4o-mini-transcribe'
+              }
             />
           </div>
 

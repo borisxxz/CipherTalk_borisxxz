@@ -76,7 +76,7 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
   const [sttTranscript, setSttTranscript] = useState<string | null>(null)
   const [sttLoading, setSttLoading] = useState(false)
   const [sttError, setSttError] = useState<string | null>(null)
-  const [sttProvider, setSttProvider] = useState<'aliyun-qwen-asr' | null>(null)
+  const [sttProvider, setSttProvider] = useState<'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | null>(null)
   const [isEditingStt, setIsEditingStt] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [imageHasUpdate, setImageHasUpdate] = useState(false)
@@ -615,12 +615,14 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
         const onlineReady = await checkOnlineSttConfigReady()
         modelExists = onlineReady.ready
         const onlineProvider = await window.electronAPI.config.get('sttOnlineProvider')
-        setSttProvider(onlineProvider === 'aliyun-qwen-asr' ? 'aliyun-qwen-asr' : null)
+        setSttProvider(onlineProvider === 'aliyun-qwen-asr' ? 'aliyun-qwen-asr' : onlineProvider === 'xiaomi-mimo-asr' ? 'xiaomi-mimo-asr' : null)
         modelName = onlineProvider === 'aliyun-qwen-asr'
           ? '阿里云 Qwen-ASR'
-          : onlineProvider === 'custom'
-            ? '自定义在线接口'
-            : 'OpenAI 兼容在线转写'
+          : onlineProvider === 'xiaomi-mimo-asr'
+            ? '小米 MiMo ASR'
+            : onlineProvider === 'custom'
+              ? '自定义在线接口'
+              : 'OpenAI 兼容在线转写'
 
         if (!modelExists) {
           setSttError(onlineReady.error || '在线转写配置不完整，请先到设置页补齐')

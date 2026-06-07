@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Search, Download, FolderOpen, RefreshCw, Check, FileJson, FileText, Table, Loader2, X, FileSpreadsheet, Database, FileCode, CheckCircle, XCircle, ExternalLink, MessageSquare, Users, User, Filter, Image, Video, CircleUserRound, Smile, Mic, Camera, Heart } from 'lucide-react'
+import { Search, Download, FolderOpen, RefreshCw, Check, FileJson, FileText, Table, Loader2, X, FileSpreadsheet, Database, FileCode, CheckCircle, XCircle, ExternalLink, MessageSquare, Users, User, Filter, Image, Video, CircleUserRound, Smile, Mic, Camera, Heart, Languages } from 'lucide-react'
 import DateRangePicker from '../components/DateRangePicker'
 import { useTitleBarStore } from '../stores/titleBarStore'
 import * as configService from '../services/config'
@@ -34,6 +34,7 @@ interface ExportOptions {
   exportVideos: boolean
   exportEmojis: boolean
   exportVoices: boolean
+  autoTranscribeVoice: boolean
 }
 
 interface ContactExportOptions {
@@ -114,7 +115,8 @@ function ExportPage() {
     exportImages: false,
     exportVideos: false,
     exportEmojis: false,
-    exportVoices: false
+    exportVoices: false,
+    autoTranscribeVoice: false
   })
 
   // 通讯录导出状态
@@ -515,7 +517,8 @@ function ExportPage() {
         exportImages: !options.exportImages,
         exportVideos: !options.exportVideos,
         exportEmojis: !options.exportEmojis,
-        exportVoices: !options.exportVoices
+        exportVoices: !options.exportVoices,
+        autoTranscribeVoice: options.autoTranscribeVoice
       }
 
       if (options.format === 'chatlab' || options.format === 'chatlab-jsonl' || options.format === 'json' || options.format === 'excel' || options.format === 'html' || options.format === 'sql') {
@@ -836,6 +839,16 @@ function ExportPage() {
                     <div className="custom-checkbox"></div>
                     <Mic size={16} style={{ color: 'var(--text-tertiary)' }} />
                     <span>排除语音</span>
+                  </label>
+                  <label className="checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={options.autoTranscribeVoice}
+                      onChange={e => setOptions(prev => ({ ...prev, autoTranscribeVoice: e.target.checked }))}
+                    />
+                    <div className="custom-checkbox"></div>
+                    <Languages size={16} style={{ color: 'var(--text-tertiary)' }} />
+                    <span>自动语音转文字</span>
                   </label>
                 </div>
               </div>
@@ -1224,6 +1237,7 @@ function ExportPage() {
               {options.exportVideos && <span> · 排除视频</span>}
               {options.exportEmojis && <span> · 排除表情</span>}
               {options.exportVoices && <span> · 排除语音</span>}
+              {options.autoTranscribeVoice && <span> · 自动转文字</span>}
               {options.exportAvatars && <span> · 含头像</span>}
             </div>
             {exportProgress.total > 0 && (

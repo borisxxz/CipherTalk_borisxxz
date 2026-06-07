@@ -1,6 +1,6 @@
 import { ConfigService } from './config'
 
-type OnlineProvider = 'openai-compatible' | 'aliyun-qwen-asr' | 'custom'
+type OnlineProvider = 'openai-compatible' | 'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | 'custom'
 
 export interface OnlineTranscribeConfig {
   provider: OnlineProvider
@@ -132,6 +132,112 @@ export class VoiceTranscribeServiceOnline {
     return { success: true, transcript }
   }
 
+  private async transcribeWithXiaomi(
+    wavData: Buffer,
+    config: OnlineTranscribeConfig,
+    signal: AbortSignal,
+    onPartial?: (text: string) => void
+  ): Promise<{ success: boolean; transcript?: string; error?: string }> {
+    const dataUrl = `data:audio/wav;base64,${wavData.toString('base64')}`
+    const body: Record<string, any> = {
+      model: config.model,
+      stream: true,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_audio',
+              input_audio: {
+                data: dataUrl
+              }
+            }
+          ]
+        }
+      ],
+      asr_options: {
+        language: config.language || 'auto'
+      }
+    }
+
+    const response = await fetch(this.resolveAliyunChatUrl(config.baseURL), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body),
+      signal
+    })
+
+    if (!response.ok) {
+      let payload: any = null
+      try {
+        payload = await response.json()
+      } catch {
+        payload = null
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, error: '小米 MiMo ASR 认证失败，请检查 API Key' }
+      }
+      if (response.status === 429) {
+        return { success: false, error: '小米 MiMo ASR 请求过于频繁或额度不足，请稍后重试' }
+      }
+      const message = payload?.error?.message || payload?.message || `HTTP ${response.status}`
+      return { success: false, error: `小米 MiMo ASR 转写失败: ${message}` }
+    }
+
+    if (!response.body) {
+      return { success: false, error: '小米 MiMo ASR 未返回可读取的数据流' }
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    let buffer = ''
+    let transcript = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop() || ''
+
+      for (const event of events) {
+        const dataLines = event
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.startsWith('data:'))
+
+        for (const line of dataLines) {
+          const data = line.slice(5).trim()
+          if (!data || data === '[DONE]') continue
+
+          try {
+            const chunk = JSON.parse(data)
+            const delta = chunk?.choices?.[0]?.delta
+            const text = this.extractAliyunTextFromContent(delta?.content)
+            if (text) {
+              transcript += text
+              onPartial?.(transcript)
+            }
+          } catch {
+            // ignore malformed chunk
+          }
+        }
+      }
+    }
+
+    transcript = transcript.trim()
+    if (!transcript) {
+      return { success: false, error: '小米 MiMo ASR 接口返回成功，但未提取到识别文本' }
+    }
+
+    return { success: true, transcript }
+  }
+
   private resolveTranscriptionUrl(rawUrl: string): string {
     const trimmed = rawUrl.trim().replace(/\/+$/, '')
     if (!trimmed) return ''
@@ -214,7 +320,7 @@ export class VoiceTranscribeServiceOnline {
   }
 
   private resolveRequestUrl(config: OnlineTranscribeConfig): string {
-    if (config.provider === 'aliyun-qwen-asr') {
+    if (config.provider === 'aliyun-qwen-asr' || config.provider === 'xiaomi-mimo-asr') {
       return this.resolveAliyunChatUrl(config.baseURL)
     }
     return config.provider === 'custom'
@@ -223,7 +329,7 @@ export class VoiceTranscribeServiceOnline {
   }
 
   private resolveTestUrl(config: OnlineTranscribeConfig): string {
-    if (config.provider === 'aliyun-qwen-asr') {
+    if (config.provider === 'aliyun-qwen-asr' || config.provider === 'xiaomi-mimo-asr') {
       return this.resolveModelsUrl(config.baseURL)
     }
     return config.provider === 'custom'
@@ -301,6 +407,10 @@ export class VoiceTranscribeServiceOnline {
     try {
       if (config.provider === 'aliyun-qwen-asr') {
         return await this.transcribeWithAliyun(wavData, config, controller.signal, onPartial)
+      }
+
+      if (config.provider === 'xiaomi-mimo-asr') {
+        return await this.transcribeWithXiaomi(wavData, config, controller.signal, onPartial)
       }
 
       const form = new FormData()

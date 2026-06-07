@@ -6,7 +6,7 @@
   "license": "CC-BY-NC-SA-4.0",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "node scripts/clean-dist-electron.cjs && vite",
+    "dev": "chcp 65001 >nul 2>&1 & node scripts/clean-dist-electron.cjs && vite",
     "icon:mac": "bash scripts/build-macos-icon.sh",
     "native:macos": "bash native-dlls/build-macos.sh",
     "native:macos:check": "node scripts/check-macos-native.js",

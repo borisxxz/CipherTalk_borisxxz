@@ -4,6 +4,7 @@ import * as https from 'https'
 import * as http from 'http'
 import { ConfigService } from './config'
 import { voiceTranscribeService } from './voiceTranscribeService'
+import { sttRuntimeService } from './sttRuntimeService'
 import * as ExcelJS from 'exceljs'
 import { HtmlExportGenerator } from './htmlExportGenerator'
 import { imageDecryptService } from './imageDecryptService'
@@ -93,6 +94,7 @@ export interface ExportOptions {
   exportVideos?: boolean
   exportEmojis?: boolean
   exportVoices?: boolean
+  autoTranscribeVoice?: boolean
   mediaPathMap?: Map<number, string>
   // 语音独立映射表：同一秒可能存在多条语音，必须按 localId 索引
   voicePathMap?: Map<number, string>
@@ -513,7 +515,7 @@ class ExportService {
   /**
    * 解析消息内容为可读文本
    */
-  private parseMessageContent(content: string, localType: number, sessionId?: string, createTime?: number, mediaPathMap?: Map<number, string>, localId?: number, voicePathMap?: Map<number, string>): string | null {
+  private parseMessageContent(content: string, localType: number, sessionId?: string, createTime?: number, mediaPathMap?: Map<number, string>, localId?: number, voicePathMap?: Map<number, string>, includeTranscript?: boolean): string | null {
     if (!content) return null
 
     // 检查 XML 中的 type 标签（支持大 localType 的情况）
@@ -536,7 +538,7 @@ class ExportService {
       }
       case 34: {
         // 语音消息：优先用 localId 在 voicePathMap 查找（避免同时间戳冲突）
-        const transcript = (sessionId && createTime) ? voiceTranscribeService.getCachedTranscript(sessionId, createTime) : null
+        const transcript = includeTranscript && sessionId && createTime ? voiceTranscribeService.getCachedTranscript(sessionId, createTime) : null
         if (voicePathMap && localId && voicePathMap.has(localId)) {
           return `[语音消息] ${voicePathMap.get(localId)}${transcript ? ' ' + transcript : ''}`
         }
@@ -914,7 +916,7 @@ class ExportService {
 
       for (const msg of allMessages) {
         const memberInfo = memberSet.get(msg.senderUsername) || { platformId: msg.senderUsername, accountName: msg.senderUsername }
-        let parsedContent = this.parseMessageContent(msg.content, msg.localType, sessionId, msg.createTime, options.mediaPathMap, msg.localId, options.voicePathMap)
+        let parsedContent = this.parseMessageContent(msg.content, msg.localType, sessionId, msg.createTime, options.mediaPathMap, msg.localId, options.voicePathMap, options.autoTranscribeVoice)
 
         // 转账消息：追加 "谁转账给谁" 信息
         if (parsedContent && parsedContent.startsWith('[转账]') && msg.content) {
@@ -1618,7 +1620,7 @@ class ExportService {
               type: this.getMessageTypeName(localType, content),
               localType,
               chatLabType: this.convertMessageType(localType, content),
-              content: this.parseMessageContent(content, localType, sessionId, createTime, options.mediaPathMap, row.local_id || 0, options.voicePathMap),
+              content: this.parseMessageContent(content, localType, sessionId, createTime, options.mediaPathMap, row.local_id || 0, options.voicePathMap, options.autoTranscribeVoice),
               rawContent: content, // 保留原始内容（用于转账描述解析）
               isSend: isSend ? 1 : 0,
               senderUsername: actualSender,
@@ -1840,7 +1842,7 @@ class ExportService {
         const time = new Date(msg.createTime * 1000)
 
         // 获取消息内容（使用统一的解析方法）
-        let messageContent = this.parseMessageContent(msg.content, msg.type, sessionId, msg.createTime, options.mediaPathMap, msg.localId, options.voicePathMap)
+        let messageContent = this.parseMessageContent(msg.content, msg.type, sessionId, msg.createTime, options.mediaPathMap, msg.localId, options.voicePathMap, options.autoTranscribeVoice)
 
         // 转账消息：追加 "谁转账给谁" 信息
         if (messageContent && messageContent.startsWith('[转账]') && msg.content) {
@@ -2044,7 +2046,7 @@ class ExportService {
               chatRecordList = this.parseChatHistory(content)
             }
 
-            let parsedContent = this.parseMessageContent(content, localType, sessionId, createTime, options.mediaPathMap, row.local_id || 0, options.voicePathMap)
+            let parsedContent = this.parseMessageContent(content, localType, sessionId, createTime, options.mediaPathMap, row.local_id || 0, options.voicePathMap, options.autoTranscribeVoice)
 
             // 转账消息：追加 "谁转账给谁" 信息
             if (parsedContent && parsedContent.startsWith('[转账]')) {
@@ -2552,6 +2554,67 @@ class ExportService {
             }
           } catch (e) {
             console.error(`导出 ${sessionId} 媒体文件失败:`, e)
+          }
+        }
+
+        // 自动语音转写：导出媒体后、解析消息前
+        console.log(`[Export] autoTranscribeVoice=${options.autoTranscribeVoice}, voicePathMap=${voicePathMap ? voicePathMap.size : 'undefined'}, exportVoices=${options.exportVoices}`)
+        if (options.autoTranscribeVoice) {
+          if (!voicePathMap || voicePathMap.size === 0) {
+            console.warn(`[Export] ${sessionId} 自动语音转写已启用但无语音文件 (voicePathMap=${voicePathMap ? voicePathMap.size : 'undefined'}, exportVoices=${options.exportVoices})`)
+          } else {
+            console.log(`[Export] ${sessionId} 开始自动语音转写, voicePathMap: ${voicePathMap.size} 条`)
+          }
+        }
+        if (options.autoTranscribeVoice && voicePathMap && voicePathMap.size > 0) {
+          let transcribed = 0
+          let skipped = 0
+          let firstError: string | null = null
+          const entries = Array.from(voicePathMap.entries())
+          const sessionOutputDir = hasMedia ? path.join(outputDir, safeName) : outputDir
+
+          for (let idx = 0; idx < entries.length; idx++) {
+            const [localId, relPath] = entries[idx]
+            const fileName = path.basename(relPath)
+            const createTimeStr = fileName.split('_')[0]
+            const createTime = parseInt(createTimeStr, 10)
+
+            if (!createTime || isNaN(createTime)) { skipped++; continue }
+
+            const cached = voiceTranscribeService.getCachedTranscript(sessionId, createTime)
+            if (cached) { skipped++; continue }
+
+            const wavPath = path.join(sessionOutputDir, relPath)
+            if (!fs.existsSync(wavPath)) { skipped++; continue }
+
+            try {
+              const wavData = fs.readFileSync(wavPath)
+              const result = await sttRuntimeService.transcribeWavBuffer(wavData)
+              if (result.success && result.transcript) {
+                voiceTranscribeService.saveTranscriptCache(sessionId, createTime, result.transcript)
+                transcribed++
+              } else if (!firstError && result.error) {
+                firstError = result.error
+              }
+            } catch (e) {
+              if (!firstError) firstError = String(e)
+            }
+
+            if ((idx + 1) % 10 === 0 || idx === entries.length - 1) {
+              onProgress?.({
+                current: i + 1,
+                total: sessionIds.length,
+                currentSession: sessionInfo.displayName,
+                phase: 'writing',
+                detail: `语音转写: ${idx + 1}/${entries.length} (新转写 ${transcribed})`
+              })
+            }
+          }
+
+          if (transcribed > 0) {
+            console.log(`[Export] ${sessionId} 自动转写完成: ${transcribed} 条新转写, ${skipped} 条跳过`)
+          } else if (firstError && skipped === 0) {
+            console.error(`[Export] ${sessionId} 自动语音转写失败: ${firstError}`)
           }
         }
 

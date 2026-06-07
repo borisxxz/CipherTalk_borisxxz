@@ -848,6 +848,11 @@ a > .wx-card:hover { opacity: 0.85; }
       var voiceMatch2 = content.match(/^\\[\\u8BED\\u97F3\\u6D88\\u606F\\]\\s+(voices\\/[^\\s]+)(?:\\s+([\\s\\S]+))?$/);
       if (voiceMatch2) { voiceMatch = voiceMatch2; voiceMatch[2] = undefined; voiceMatch[3] = voiceMatch2[2]; }
     }
+    // 第一个正则匹配了路径但没捕获转写文本时，用 fallback 提取
+    if (voiceMatch && !voiceMatch[3]) {
+      var voiceMatchFallback = content.match(/^\\[\\u8BED\\u97F3\\u6D88\\u606F\\]\\s+voices\\/[^\\s]+\\s+([\\s\\S]+)$/);
+      if (voiceMatchFallback) { voiceMatch[3] = voiceMatchFallback[1]; }
+    }
     if (voiceMatch) {
       var voiceSrc = esc(voiceMatch[1]);
       var voiceText = voiceMatch[3] ? '<div class="voice-text">'+esc(voiceMatch[3])+'</div>' : '';

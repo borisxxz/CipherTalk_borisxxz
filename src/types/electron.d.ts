@@ -1054,7 +1054,7 @@ export interface ElectronAPI {
       error?: string
     }>
     testOnlineConfig: (overrides?: {
-      provider?: 'openai-compatible' | 'aliyun-qwen-asr' | 'custom'
+      provider?: 'openai-compatible' | 'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | 'custom'
       apiKey?: string
       baseURL?: string
       model?: string
@@ -1544,6 +1544,11 @@ export interface ExportOptions {
   dateRange?: { start: number; end: number } | null
   exportMedia?: boolean
   exportAvatars?: boolean
+  exportImages?: boolean
+  exportVideos?: boolean
+  exportEmojis?: boolean
+  exportVoices?: boolean
+  autoTranscribeVoice?: boolean
 }
 
 export interface ContactExportOptions {

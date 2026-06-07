@@ -311,12 +311,12 @@ export async function setSttMode(mode: 'cpu' | 'gpu' | 'online'): Promise<void> 
   await config.set(CONFIG_KEYS.STT_MODE, mode)
 }
 
-export async function getSttOnlineProvider(): Promise<'openai-compatible' | 'aliyun-qwen-asr' | 'custom'> {
+export async function getSttOnlineProvider(): Promise<'openai-compatible' | 'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | 'custom'> {
   const value = await config.get(CONFIG_KEYS.STT_ONLINE_PROVIDER)
-  return (value as 'openai-compatible' | 'aliyun-qwen-asr' | 'custom') || 'openai-compatible'
+  return (value as 'openai-compatible' | 'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | 'custom') || 'openai-compatible'
 }
 
-export async function setSttOnlineProvider(provider: 'openai-compatible' | 'aliyun-qwen-asr' | 'custom'): Promise<void> {
+export async function setSttOnlineProvider(provider: 'openai-compatible' | 'aliyun-qwen-asr' | 'xiaomi-mimo-asr' | 'custom'): Promise<void> {
   await config.set(CONFIG_KEYS.STT_ONLINE_PROVIDER, provider)
 }
 
