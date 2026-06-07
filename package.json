@@ -112,7 +112,7 @@
   },
   "build": {
     "appId": "com.ciphertalk.app",
-    "productName": "CipherTalk",
+    "productName": "CipherTalk_self",
     "compression": "maximum",
     "npmRebuild": false,
     "afterPack": "scripts/clean-locales.js",
