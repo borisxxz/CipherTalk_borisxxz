@@ -1,8 +1,8 @@
 {
-  "name": "ciphertalk",
+  "name": "CipherTalk_self",
   "version": "6.0.8",
   "description": "密语 - 微信聊天记录查看工具",
-  "author": "borisxxz",
+  "author": "Boris007",
   "license": "CC-BY-NC-SA-4.0",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -129,7 +129,8 @@
     "win": {
       "icon": "public/icon.ico",
       "target": ["nsis", "portable"],
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "executableName": "CipherTalk_self"
     },
     "mac": {
       "icon": "public/icon.icns",
