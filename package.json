@@ -128,7 +128,7 @@
     },
     "win": {
       "icon": "public/icon.ico",
-      "target": "nsis",
+      "target": ["nsis", "portable"],
       "requestedExecutionLevel": "asInvoker"
     },
     "mac": {
