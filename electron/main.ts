@@ -1,3 +1,4 @@
+import './portable'
 import { app, BrowserWindow, protocol, type Tray } from 'electron'
 import { randomBytes } from 'crypto'
 import { autoUpdater } from 'electron-updater'
