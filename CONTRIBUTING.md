@@ -49,7 +49,7 @@
 ```bash
 # Fork 项目到你的 GitHub 账号
 # 克隆你的 fork
-git clone https://github.com/ILoveBingLu/miyu.git
+git clone https://github.com/borisxxz/CipherTalk_borisxxz.git
 cd miyu
 
 # 安装依赖

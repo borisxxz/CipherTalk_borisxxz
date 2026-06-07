@@ -1,10 +1,8 @@
 import {
   app,
   BrowserWindow,
-  Menu,
   nativeImage,
   nativeTheme,
-  Tray,
   type BrowserWindowConstructorOptions
 } from 'electron'
 import { join } from 'path'
@@ -141,25 +139,7 @@ function getDockIconPath(ctx: MainProcessContext): string {
     : join(process.resourcesPath, 'icon.png')
 }
 
-function getTrayIconPath(ctx: MainProcessContext): string {
-  if (process.platform === 'darwin') {
-    const isDev = !!process.env.VITE_DEV_SERVER_URL
-    const devTrayPath = join(__dirname, '../public/tray-mac.png')
 
-    if (isDev && existsSync(devTrayPath)) return devTrayPath
-  }
-
-  return getAppIconPath(ctx)
-}
-
-function getTrayImage(ctx: MainProcessContext) {
-  const iconPath = getTrayIconPath(ctx)
-  const image = loadNativeImageIfValid(iconPath, 'tray icon')
-
-  if (!image) return nativeImage.createEmpty()
-  if (process.platform === 'darwin') return image.resize({ height: 26 })
-  return image
-}
 
 function setupDevToolsShortcut(win: BrowserWindow, getTargetWindow?: () => BrowserWindow | null): void {
   if (!process.env.VITE_DEV_SERVER_URL) return
@@ -224,55 +204,6 @@ export function createWindowManager(ctx: MainProcessContext): WindowManager {
   let aiSummaryWindow: BrowserWindow | null = null
   let welcomeWindow: BrowserWindow | null = null
   let chatHistoryWindow: BrowserWindow | null = null
-
-  const createTray = (): Tray | null => {
-    const existingTray = ctx.getTray()
-    if (existingTray) return existingTray
-
-    let tray: Tray
-    try {
-      tray = new Tray(getTrayImage(ctx))
-    } catch (error) {
-      console.warn('[Icon] tray creation failed:', error)
-      return null
-    }
-
-    ctx.setTray(tray)
-
-    if (process.platform === 'darwin') {
-      tray.setIgnoreDoubleClickEvents(true)
-    }
-
-    const showMainWindow = () => {
-      const mainWindow = ctx.getMainWindow()
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore()
-        mainWindow.show()
-        mainWindow.focus()
-      }
-    }
-
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: '显示主窗口',
-        click: showMainWindow
-      },
-      { type: 'separator' },
-      {
-        label: '退出',
-        click: () => {
-          ctx.appWithQuitFlag.isQuitting = true
-          app.quit()
-        }
-      }
-    ])
-
-    tray.setToolTip('密语 CipherTalk')
-    tray.setContextMenu(contextMenu)
-    tray.on('double-click', showMainWindow)
-
-    return tray
-  }
 
   const manager: WindowManager = {
     createMainWindow() {
@@ -339,24 +270,7 @@ export function createWindowManager(ctx: MainProcessContext): WindowManager {
         win.show()
       })
 
-      win.on('close', (event) => {
-        const updateInfo = appUpdateService.getCachedUpdateInfo()
-        if (updateInfo?.forceUpdate || ctx.getIsInstallingUpdate()) {
-          ctx.appWithQuitFlag.isQuitting = true
-          return
-        }
-
-        if (ctx.appWithQuitFlag.isQuitting) return
-
-        const closeToTray = ctx.getConfigService()?.get('closeToTray')
-        if (closeToTray !== false) {
-          event.preventDefault()
-          win.hide()
-          if (!ctx.getTray()) createTray()
-          return
-        }
-
-        event.preventDefault()
+      win.on('close', () => {
         ctx.appWithQuitFlag.isQuitting = true
         app.quit()
       })
@@ -423,7 +337,9 @@ export function createWindowManager(ctx: MainProcessContext): WindowManager {
       }
     },
 
-    createTray,
+    createTray() {
+      return null
+    },
 
     destroyTray() {
       const tray = ctx.getTray()

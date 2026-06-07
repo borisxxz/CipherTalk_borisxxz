@@ -389,8 +389,22 @@ body {
 .msg-emoji { max-width: 120px; max-height: 120px; display: block; cursor: pointer; }
 
 .msg-voice { display: flex; flex-direction: column; gap: 4px; }
-.msg-voice audio { height: 32px; max-width: 240px; }
-.msg-voice .voice-text { font-size: 12px; opacity: 0.8; }
+.msg-voice .voice-player { display: flex; flex-direction: column; gap: 8px; min-width: 320px; max-width: 480px; }
+.msg-voice .voice-progress-bar { width: 100%; height: 14px; background: rgba(0,0,0,0.1); border-radius: 7px; cursor: pointer; overflow: hidden; border: 1px solid rgba(0,0,0,0.06); }
+.msg-voice .voice-progress-bar:hover { height: 16px; }
+.msg-voice .voice-progress-fill { height: 100%; background: var(--tag-active-bg); border-radius: 7px; width: 0%; transition: width 0.1s linear; }
+.msg-voice .voice-player-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.msg-voice .voice-play-btn { width: 32px; height: 32px; border: none; border-radius: 50%; background: var(--tag-active-bg); color: var(--tag-active-text); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.15s; padding: 0; }
+.msg-voice .voice-play-btn:hover { opacity: 0.8; }
+.msg-voice .voice-play-btn svg { display: block; }
+.msg-voice .voice-time { font-size: 11px; color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.msg-voice .voice-speed-wrap { display: flex; align-items: center; gap: 4px; }
+.msg-voice .voice-speed-input { width: 44px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--tag-bg); color: var(--text-secondary); font-size: 11px; text-align: center; outline: none; -moz-appearance: textfield; }
+.msg-voice .voice-speed-input::-webkit-outer-spin-button, .msg-voice .voice-speed-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.msg-voice .voice-speed-input:focus { border-color: var(--tag-active-bg); }
+.msg-voice .voice-speed-label { font-size: 11px; color: var(--text-secondary); }
+.msg-voice .voice-text { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+.msg-voice .voice-player audio { display: none; }
 
 .hongbao-message {
   width: 240px; max-width: 100%;
@@ -829,11 +843,33 @@ a > .wx-card:hover { opacity: 0.85; }
     if (emojiMatch) return '<img class="msg-emoji" src="'+esc(emojiMatch[1])+'" loading="lazy" onclick="window.__lightbox(this.src)" onerror="window.__imgError(this)">';
     if (content === '['+'\\u52A8\\u753B\\u8868\\u60C5'+']') return '<div class="msg-image broken">\\u{1F600} \\u8868\\u60C5</div>';
 
-    var voiceMatch = content.match(/^\\[\\u8BED\\u97F3\\u6D88\\u606F\\]\\s+(voices\\/[^\\s]+)(?:\\s+([\\s\\S]+))?$/);
+    var voiceMatch = content.match(/^\\[\\u8BED\\u97F3\\u6D88\\u606F\\]\\s+(voices\\/[^\\s]+)(?:\\s+(\\d+)(?:[\"\\u201D]\\s*)?(?:\\s+([\\s\\S]+))?)?$/);
+    if (!voiceMatch) {
+      var voiceMatch2 = content.match(/^\\[\\u8BED\\u97F3\\u6D88\\u606F\\]\\s+(voices\\/[^\\s]+)(?:\\s+([\\s\\S]+))?$/);
+      if (voiceMatch2) { voiceMatch = voiceMatch2; voiceMatch[2] = undefined; voiceMatch[3] = voiceMatch2[2]; }
+    }
     if (voiceMatch) {
-      var html = '<div class="msg-voice"><audio controls preload="metadata" src="'+esc(voiceMatch[1])+'"></audio>';
-      if (voiceMatch[2]) html += '<div class="voice-text">'+esc(voiceMatch[2])+'</div>';
-      return html + '</div>';
+      var voiceSrc = esc(voiceMatch[1]);
+      var voiceText = voiceMatch[3] ? '<div class="voice-text">'+esc(voiceMatch[3])+'</div>' : '';
+      var voiceId = 'vp_' + Math.random().toString(36).substring(2, 10);
+      var html = '<div class="msg-voice"><div class="voice-player" id="'+voiceId+'">'
+        + '<audio preload="metadata" src="'+voiceSrc+'"></audio>'
+        + '<div class="voice-progress-bar" onclick="window.__vpSeek(event,\\''+voiceId+'\\')">'
+        + '<div class="voice-progress-fill"></div>'
+        + '</div>'
+        + '<div class="voice-player-controls">'
+        + '<button class="voice-play-btn" onclick="window.__vpToggle(\\''+voiceId+'\\')">'
+        + '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>'
+        + '</button>'
+        + '<span class="voice-time">0:00/0:00</span>'
+        + '<div class="voice-speed-wrap">'
+        + '<input class="voice-speed-input" type="number" min="0.1" max="16" step="0.1" value="1" onchange="window.__vpSpeed(\\''+voiceId+'\\')">'
+        + '<span class="voice-speed-label">x 倍速</span>'
+        + '</div>'
+        + '</div>'
+        + voiceText
+        + '</div></div>';
+      return html;
     }
     if (content === '['+'\\u8BED\\u97F3\\u6D88\\u606F'+']') return '<div class="msg-image broken">\\u{1F399}\\uFE0F \\u8BED\\u97F3</div>';
 
@@ -976,6 +1012,85 @@ a > .wx-card:hover { opacity: 0.85; }
 
   window.__lightbox = openLightbox;
   window.__imgError = imgError;
+
+  /* ===== 自定义语音播放器 ===== */
+  var vpStates = {};
+  function getVp(id) {
+    if (!vpStates[id]) {
+      var el = document.getElementById(id);
+      if (!el) return null;
+      var audio = el.querySelector('audio');
+      vpStates[id] = { el: el, audio: audio, playing: false, speed: 1 };
+      audio.addEventListener('timeupdate', function() {
+        if (!audio.duration || !isFinite(audio.duration)) return;
+        var pct = (audio.currentTime / audio.duration) * 100;
+        el.querySelector('.voice-progress-fill').style.width = pct + '%';
+        el.querySelector('.voice-time').textContent = fmtVoiceTime(audio.currentTime) + '/' + fmtVoiceTime(audio.duration);
+      });
+      audio.addEventListener('ended', function() {
+        vpStates[id].playing = false;
+        updatePlayBtn(el, false);
+        el.querySelector('.voice-progress-fill').style.width = '0%';
+        el.querySelector('.voice-time').textContent = fmtVoiceTime(audio.duration) + '/' + fmtVoiceTime(audio.duration);
+      });
+      audio.addEventListener('loadedmetadata', function() {
+        if (audio.duration && isFinite(audio.duration)) {
+          el.querySelector('.voice-time').textContent = '0:00/' + fmtVoiceTime(audio.duration);
+        }
+      });
+    }
+    return vpStates[id];
+  }
+  function fmtVoiceTime(sec) {
+    var s = Math.floor(sec || 0);
+    var m = Math.floor(s / 60);
+    s = s % 60;
+    return m + ':' + String(s).padStart(2, '0');
+  }
+  function updatePlayBtn(el, playing) {
+    var btn = el.querySelector('.voice-play-btn');
+    if (playing) {
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+    } else {
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>';
+    }
+  }
+  window.__vpToggle = function(id) {
+    var vp = getVp(id);
+    if (!vp) return;
+    if (vp.playing) {
+      vp.audio.pause();
+      vp.playing = false;
+      updatePlayBtn(vp.el, false);
+    } else {
+      if (vp.audio.currentTime > 0 && vp.audio.currentTime < vp.audio.duration) {
+        // resume from pause
+      } else {
+        vp.audio.currentTime = 0;
+      }
+      vp.audio.play();
+      vp.playing = true;
+      updatePlayBtn(vp.el, true);
+    }
+  };
+  window.__vpSeek = function(e, id) {
+    var vp = getVp(id);
+    if (!vp || !vp.audio.duration || !isFinite(vp.audio.duration)) return;
+    var bar = vp.el.querySelector('.voice-progress-bar');
+    var rect = bar.getBoundingClientRect();
+    var ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    vp.audio.currentTime = ratio * vp.audio.duration;
+  };
+  window.__vpSpeed = function(id) {
+    var vp = getVp(id);
+    if (!vp) return;
+    var input = vp.el.querySelector('.voice-speed-input');
+    if (!input) return;
+    var s = parseFloat(input.value);
+    if (isNaN(s) || s < 0.1 || s > 16) return;
+    vp.speed = s;
+    vp.audio.playbackRate = vp.speed;
+  };
 
   /* ===== 初始化 ===== */
   renderStats();

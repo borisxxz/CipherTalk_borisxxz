@@ -22,6 +22,8 @@ import {
   startLocalIntegrationServices,
   stopLocalIntegrationServices
 } from './main/startup'
+import { wcdbService } from './services/wcdbService'
+import { monitorBridge } from './services/monitorBridge'
 
 type AppWithQuitFlag = typeof app & {
   isQuitting?: boolean
@@ -233,11 +235,6 @@ if (gotSingleInstanceLock) {
       markStartupMilestone('startup:main-window-create-start')
       ctx.getWindowManager().createMainWindow()
       markStartupMilestone('startup:main-window-create-done')
-
-      // 创建系统托盘
-      markStartupMilestone('startup:tray-create-start')
-      ctx.getWindowManager().createTray()
-      markStartupMilestone('startup:tray-create-done')
     }
 
     // 启动后台同步放在窗口编排之后，避免启动连接数据库时抢占磁盘 IO。
@@ -254,7 +251,6 @@ if (gotSingleInstanceLock) {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         ctx.getWindowManager().createMainWindow()
-        ctx.getWindowManager().createTray()
       }
     })
   }).catch((error) => {
@@ -264,12 +260,8 @@ if (gotSingleInstanceLock) {
 }
 
 app.on('window-all-closed', () => {
-  // macOS 上保持应用运行
   if (process.platform !== 'darwin') {
-    // 如果托盘存在，不退出应用
-    if (!tray) {
-      app.quit()
-    }
+    app.quit()
   }
 })
 
@@ -277,7 +269,14 @@ app.on('before-quit', () => {
   // 设置退出标志
   appWithQuitFlag.isQuitting = true
 
+  // 停止 HTTP API、MCP 代理和 MCP 客户端
   stopLocalIntegrationServices()
+
+  // 停止文件监听器
+  monitorBridge.stop()
+
+  // 终止 WCDB Worker 线程，防止自动重启
+  wcdbService.shutdown()
 
   configService?.close()
 

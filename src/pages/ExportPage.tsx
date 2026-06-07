@@ -48,7 +48,7 @@ interface ContactExportOptions {
 }
 
 interface MomentsExportOptions {
-  format: 'json' | 'html' | 'excel'
+  format: 'json' | 'html' | 'excel' | 'chatlab' | 'chatlab-jsonl' | 'txt' | 'sql'
   startDate: string
   endDate: string
 }
@@ -70,6 +70,9 @@ interface ExportResult {
   successCount?: number
   failCount?: number
   error?: string
+  imageMissCount?: number
+  videoMissCount?: number
+  missedImages?: Array<{ createTime: number; sender: string }>
 }
 
 // 会话类型筛选
@@ -80,6 +83,7 @@ function ExportPage() {
   const setTitleBarContent = useTitleBarStore(state => state.setRightContent)
   const location = useLocation()
   const preSelectAppliedRef = useRef(false)
+  const missDataRef = useRef({ imageMissCount: 0, videoMissCount: 0, missedImages: [] as Array<{ createTime: number; sender: string }> })
 
   // 聊天导出状态
   const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -95,7 +99,10 @@ function ExportPage() {
     total: 0,
     currentName: '',
     phase: '',
-    detail: ''
+    detail: '',
+    imageMissCount: 0,
+    videoMissCount: 0,
+    missedImages: [] as Array<{ createTime: number; sender: string }>
   })
   const [exportResult, setExportResult] = useState<ExportResult | null>(null)
 
@@ -196,12 +203,22 @@ function ExportPage() {
         'writing': '正在写入文件...',
         'complete': '导出完成'
       }
-      setExportProgress({
-        current: data.current || 0,
-        total: data.total || 0,
-        currentName: data.currentSession || '',
-        phase: (data.phase ? phaseMap[data.phase] : undefined) || data.phase || '',
-        detail: data.detail || ''
+      setExportProgress(prev => {
+        const newImageMiss = (data.imageMissCount ?? prev.imageMissCount) || 0
+        const newVideoMiss = (data.videoMissCount ?? prev.videoMissCount) || 0
+        const newMissedImages = data.missedImages || prev.missedImages
+        // 同步更新 ref，确保导出完成时能拿到最新值
+        missDataRef.current = { imageMissCount: newImageMiss, videoMissCount: newVideoMiss, missedImages: newMissedImages }
+        return {
+          current: data.current || 0,
+          total: data.total || 0,
+          currentName: data.currentSession || '',
+          phase: (data.phase ? phaseMap[data.phase] : undefined) || data.phase || '',
+          detail: data.detail || '',
+          imageMissCount: newImageMiss,
+          videoMissCount: newVideoMiss,
+          missedImages: newMissedImages
+        }
       })
     })
 
@@ -482,7 +499,8 @@ function ExportPage() {
     if (selectedSessions.size === 0 || !exportFolder) return
 
     setIsExporting(true)
-    setExportProgress({ current: 0, total: selectedSessions.size, currentName: '', phase: '准备导出', detail: '' })
+    setExportProgress({ current: 0, total: selectedSessions.size, currentName: '', phase: '准备导出', detail: '', imageMissCount: 0, videoMissCount: 0, missedImages: [] })
+    missDataRef.current = { imageMissCount: 0, videoMissCount: 0, missedImages: [] }
     setExportResult(null)
 
     try {
@@ -494,10 +512,10 @@ function ExportPage() {
           end: Math.floor(new Date(options.endDate + 'T23:59:59').getTime() / 1000)
         } : null,
         exportAvatars: options.exportAvatars,
-        exportImages: options.exportImages,
-        exportVideos: options.exportVideos,
-        exportEmojis: options.exportEmojis,
-        exportVoices: options.exportVoices
+        exportImages: !options.exportImages,
+        exportVideos: !options.exportVideos,
+        exportEmojis: !options.exportEmojis,
+        exportVoices: !options.exportVoices
       }
 
       if (options.format === 'chatlab' || options.format === 'chatlab-jsonl' || options.format === 'json' || options.format === 'excel' || options.format === 'html' || options.format === 'sql') {
@@ -506,7 +524,12 @@ function ExportPage() {
           exportFolder,
           exportOptions
         )
-        setExportResult(result)
+        setExportResult({
+          ...result,
+          imageMissCount: missDataRef.current.imageMissCount,
+          videoMissCount: missDataRef.current.videoMissCount,
+          missedImages: missDataRef.current.missedImages
+        })
       } else {
         setExportResult({ success: false, error: `${options.format.toUpperCase()} 格式导出功能开发中...` })
       }
@@ -549,7 +572,7 @@ function ExportPage() {
     if (!exportFolder) return
 
     setIsExporting(true)
-    setExportProgress({ current: 0, total: 0, currentName: '朋友圈', phase: '准备导出', detail: '' })
+    setExportProgress({ current: 0, total: 0, currentName: '朋友圈', phase: '准备导出', detail: '', imageMissCount: 0, videoMissCount: 0, missedImages: [] })
     setExportResult(null)
 
     try {
@@ -575,7 +598,11 @@ function ExportPage() {
   const momentsFormatOptions = [
     { value: 'html', label: 'HTML', icon: FileText, desc: '网页格式，仿朋友圈样式可直接浏览' },
     { value: 'json', label: 'JSON', icon: FileJson, desc: '结构化数据，便于程序处理' },
-    { value: 'excel', label: 'Excel', icon: FileSpreadsheet, desc: '电子表格，适合统计分析' }
+    { value: 'excel', label: 'Excel', icon: FileSpreadsheet, desc: '电子表格，适合统计分析' },
+    { value: 'chatlab', label: 'ChatLab', icon: FileCode, desc: '标准格式，支持其他软件导入' },
+    { value: 'chatlab-jsonl', label: 'ChatLab JSONL', icon: FileCode, desc: '流式格式，适合大量数据' },
+    { value: 'txt', label: 'TXT', icon: Table, desc: '纯文本，通用格式' },
+    { value: 'sql', label: 'PostgreSQL', icon: Database, desc: '数据库脚本，便于导入到数据库' }
   ]
 
   const chatFormatOptions = [
@@ -611,6 +638,8 @@ function ExportPage() {
       default: return '其他'
     }
   }
+
+  const [missDetailExpanded, setMissDetailExpanded] = useState(false)
 
   return (
     <div className="export-page">
@@ -776,7 +805,7 @@ function ExportPage() {
                     />
                     <div className="custom-checkbox"></div>
                     <Image size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <span>导出图片</span>
+                    <span>排除图片</span>
                   </label>
                   <label className="checkbox-item">
                     <input
@@ -786,7 +815,7 @@ function ExportPage() {
                     />
                     <div className="custom-checkbox"></div>
                     <Video size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <span>导出视频</span>
+                    <span>排除视频</span>
                   </label>
                   <label className="checkbox-item">
                     <input
@@ -796,7 +825,7 @@ function ExportPage() {
                     />
                     <div className="custom-checkbox"></div>
                     <Smile size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <span>导出表情包</span>
+                    <span>排除表情包</span>
                   </label>
                   <label className="checkbox-item">
                     <input
@@ -806,7 +835,7 @@ function ExportPage() {
                     />
                     <div className="custom-checkbox"></div>
                     <Mic size={16} style={{ color: 'var(--text-tertiary)' }} />
-                    <span>导出语音</span>
+                    <span>排除语音</span>
                   </label>
                 </div>
               </div>
@@ -1191,10 +1220,10 @@ function ExportPage() {
             )}
             <div className="progress-export-options">
               <span>格式: {options.format.toUpperCase()}</span>
-              {options.exportImages && <span> · 含图片</span>}
-              {options.exportVideos && <span> · 含视频</span>}
-              {options.exportEmojis && <span> · 含表情</span>}
-              {options.exportVoices && <span> · 含语音</span>}
+              {options.exportImages && <span> · 排除图片</span>}
+              {options.exportVideos && <span> · 排除视频</span>}
+              {options.exportEmojis && <span> · 排除表情</span>}
+              {options.exportVoices && <span> · 排除语音</span>}
               {options.exportAvatars && <span> · 含头像</span>}
             </div>
             {exportProgress.total > 0 && (
@@ -1230,6 +1259,35 @@ function ExportPage() {
             ) : (
               <p className="result-text error">{exportResult.error}</p>
             )}
+            {(exportResult.success && (exportResult.imageMissCount || 0) + (exportResult.videoMissCount || 0) > 0) && (
+              <div className="result-miss-warning">
+                <p className="miss-summary">
+                  {(() => {
+                    const parts: string[] = []
+                    if (exportResult.imageMissCount) parts.push(`${exportResult.imageMissCount} 张图片`)
+                    if (exportResult.videoMissCount) parts.push(`${exportResult.videoMissCount} 个视频`)
+                    return `⚠ ${parts.join('和')}未找到（请在微信中点击查看后再重新导出）`
+                  })()}
+                </p>
+                {exportResult.missedImages && exportResult.missedImages.length > 0 && (
+                  <div className="miss-detail">
+                    <button className="miss-detail-toggle" onClick={() => setMissDetailExpanded(!missDetailExpanded)}>
+                      {missDetailExpanded ? '收起详情' : '查看详情'}
+                    </button>
+                    {missDetailExpanded && (
+                      <ul className="miss-detail-list">
+                        {exportResult.missedImages.map((item, idx) => (
+                          <li key={idx}>
+                            {new Date(item.createTime * 1000).toLocaleString('zh-CN')}
+                            {item.sender ? ` - ${item.sender}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="result-actions">
               {exportResult.success && (
                 <button className="open-folder-btn" onClick={openExportFolder}>
@@ -1237,7 +1295,7 @@ function ExportPage() {
                   <span>打开文件夹</span>
                 </button>
               )}
-              <button className="close-btn" onClick={() => setExportResult(null)}>
+              <button className="close-btn" onClick={() => { setExportResult(null); setMissDetailExpanded(false) }}>
                 关闭
               </button>
             </div>

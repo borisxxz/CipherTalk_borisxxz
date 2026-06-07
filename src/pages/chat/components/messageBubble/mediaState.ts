@@ -3,6 +3,7 @@ import { LRUCache } from '../../../../utils/lruCache'
 export const globalVoiceManager = {
   currentAudio: null as HTMLAudioElement | null,
   currentStopCallback: null as (() => void) | null,
+  playbackSpeed: 1,
   play(audio: HTMLAudioElement, onStop: () => void) {
     if (this.currentAudio && this.currentAudio !== audio) {
       this.currentAudio.pause()
@@ -11,11 +12,18 @@ export const globalVoiceManager = {
     }
     this.currentAudio = audio
     this.currentStopCallback = onStop
+    audio.playbackRate = this.playbackSpeed
   },
   stop(audio: HTMLAudioElement) {
     if (this.currentAudio === audio) {
       this.currentAudio = null
       this.currentStopCallback = null
+    }
+  },
+  setSpeed(speed: number) {
+    this.playbackSpeed = speed
+    if (this.currentAudio) {
+      this.currentAudio.playbackRate = speed
     }
   },
 }

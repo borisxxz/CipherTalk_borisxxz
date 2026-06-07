@@ -10,30 +10,12 @@ import ListItemButton from '@mui/material/ListItemButton'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { Home, MessageSquare, BarChart3, Users, FileText, Database, Settings, SquareChevronLeft, SquareChevronRight, Download, Aperture, Network, Bot, FileAudio } from 'lucide-react'
-import { MCP } from '@lobehub/icons'
+import { SquareChevronLeft, SquareChevronRight, ExternalLink } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
+import { NAV_ITEMS, type NavItem } from './navConfig'
 
 const DRAWER_WIDTH = 220
 const COLLAPSED_DRAWER_WIDTH = 72
-
-type RouteItem = {
-  key: string
-  label: string
-  icon: ReactElement
-  type: 'route'
-  path: string
-}
-
-type ActionItem = {
-  key: string
-  label: string
-  icon: ReactElement
-  type: 'action'
-  onClick: () => void
-}
-
-type NavItemConfig = RouteItem | ActionItem
 
 function Sidebar() {
   const location = useLocation()
@@ -49,44 +31,14 @@ function Sidebar() {
     return location.pathname === path
   }
 
-  const openChatWindow = async () => {
+  const openWindow = async (action: string) => {
     try {
-      await window.electronAPI.window.openChatWindow()
+      const method = `open${action}` as keyof typeof window.electronAPI.window
+      await (window.electronAPI.window[method] as () => Promise<void>)()
     } catch (e) {
-      console.error('打开聊天窗口失败:', e)
+      console.error('打开窗口失败:', e)
     }
   }
-
-  const openGroupAnalyticsWindow = async () => {
-    try {
-      await window.electronAPI.window.openGroupAnalyticsWindow()
-    } catch (e) {
-      console.error('打开群聊分析窗口失败:', e)
-    }
-  }
-
-  const openMomentsWindow = async () => {
-    try {
-      await window.electronAPI.window.openMomentsWindow()
-    } catch (e) {
-      console.error('打开朋友圈窗口失败:', e)
-    }
-  }
-
-  const navItems: NavItemConfig[] = [
-    { key: 'home', label: '首页', icon: <Home size={20} />, type: 'route', path: '/home' },
-    { key: 'chat', label: '聊天查看', icon: <MessageSquare size={20} />, type: 'action', onClick: openChatWindow },
-    { key: 'moments', label: '朋友圈', icon: <Aperture size={20} />, type: 'action', onClick: openMomentsWindow },
-    { key: 'analytics', label: '私聊分析', icon: <BarChart3 size={20} />, type: 'route', path: '/analytics' },
-    { key: 'group-analytics', label: '群聊分析', icon: <Users size={20} />, type: 'action', onClick: openGroupAnalyticsWindow },
-    { key: 'annual-report', label: '年度报告', icon: <FileText size={20} />, type: 'route', path: '/annual-report' },
-    { key: 'transcription-assistant', label: '转文字助手', icon: <FileAudio size={20} />, type: 'route', path: '/transcription-assistant' },
-    { key: 'export', label: '导出数据', icon: <Download size={20} />, type: 'route', path: '/export' },
-    { key: 'data-management', label: '数据管理', icon: <Database size={20} />, type: 'route', path: '/data-management' },
-    { key: 'open-api', label: '开放接口', icon: <Network size={20} />, type: 'route', path: '/open-api' },
-    { key: 'mcp', label: 'MCP & Skills', icon: <MCP size={20} />, type: 'route', path: '/mcp' },
-    { key: 'agent', label: 'Agent', icon: <Bot size={20} />, type: 'route', path: '/agent' },
-  ]
 
   const navItemSx = {
     minHeight: 44,
@@ -153,39 +105,47 @@ function Sidebar() {
     ].join(', '),
   })
 
-  const renderNavItem = (item: NavItemConfig) => {
-    const selected = item.type === 'route' ? isActive(item.path) : false
+  const renderNavItem = (item: NavItem): ReactElement => {
+    const isRoute = item.target === 'route'
+    const selected = isRoute && item.route ? isActive(item.route) : false
+    const IconComp = item.icon
+
     const button = (
       <ListItemButton
         selected={selected}
-        {...(item.type === 'route'
-          ? { component: NavLink, to: item.path }
-          : { onClick: item.onClick })}
+        {...(isRoute
+          ? { component: NavLink, to: item.route! }
+          : { onClick: () => openWindow(item.windowAction!) })}
         sx={navItemSx}
       >
         <Box sx={railContentSx}>
           <ListItemIcon sx={navItemIconSx}>
-            {item.icon}
+            <IconComp size={20} />
           </ListItemIcon>
           <Box sx={createLabelSx(132)}>
-            <Typography
-              variant="body2"
-              sx={{
-                fontSize: 14,
-                fontWeight: 500,
-                color: 'inherit',
-                lineHeight: 1.2,
-              }}
-            >
-              {item.label}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: 'inherit',
+                  lineHeight: 1.2,
+                }}
+              >
+                {item.label}
+              </Typography>
+              {item.popOutIcon && (
+                <ExternalLink size={12} style={{ opacity: 0.45, flexShrink: 0 }} />
+              )}
+            </Box>
           </Box>
         </Box>
       </ListItemButton>
     )
 
     return (
-      <ListItem key={item.key} disablePadding sx={{ display: 'block' }}>
+      <ListItem key={item.id} disablePadding sx={{ display: 'block' }}>
         <Tooltip title={collapsed ? item.label : ''} placement="right">
           {button}
         </Tooltip>
@@ -226,7 +186,7 @@ function Sidebar() {
         }}
       >
         <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {navItems.map(renderNavItem)}
+          {NAV_ITEMS.map(renderNavItem)}
         </List>
 
         <Box sx={{ mt: 'auto', pt: 1.5 }}>
@@ -288,36 +248,6 @@ function Sidebar() {
                     </Box>
                   </Box>
                 </Box>
-              </Tooltip>
-            </ListItem>
-
-            <ListItem disablePadding sx={{ display: 'block' }}>
-              <Tooltip title={collapsed ? '设置' : ''} placement="right">
-                <ListItemButton
-                  component={NavLink}
-                  to="/settings"
-                  selected={isActive('/settings')}
-                  sx={navItemSx}
-                >
-                  <Box sx={railContentSx}>
-                    <ListItemIcon sx={navItemIconSx}>
-                      <Settings size={20} />
-                    </ListItemIcon>
-                    <Box sx={createLabelSx(132)}>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          fontSize: 14,
-                          fontWeight: 500,
-                          color: 'inherit',
-                          lineHeight: 1.2,
-                        }}
-                      >
-                        设置
-                      </Typography>
-                    </Box>
-                  </Box>
-                </ListItemButton>
               </Tooltip>
             </ListItem>
 

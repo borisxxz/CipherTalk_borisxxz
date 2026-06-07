@@ -107,11 +107,11 @@ function buildButtons(version) {
   return {
     inline_keyboard: [
       [
-        { text: '下载', url: `https://github.com/ILoveBingLu/CipherTalk/releases/tag/v${encodeURIComponent(version)}` },
-        { text: '官网', url: 'https://miyu.aiqji.com' }
+        { text: '下载', url: `https://github.com/borisxxz/CipherTalk_borisxxz/releases/tag/v${encodeURIComponent(version)}` },
+        { text: '官网', url: 'https://github.com/borisxxz/CipherTalk_borisxxz' }
       ],
       [
-        { text: '使用教程', url: 'https://ilovebinglu.notion.site/ciphertalk' }
+        { text: '使用教程', url: 'https://github.com/borisxxz/CipherTalk_borisxxz' }
       ]
     ]
   }

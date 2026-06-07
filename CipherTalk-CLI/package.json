@@ -6,12 +6,12 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ILoveBingLu/CipherTalk.git",
+    "url": "git+https://github.com/borisxxz/CipherTalk_borisxxz.git",
     "directory": "CipherTalk-CLI"
   },
-  "homepage": "https://github.com/ILoveBingLu/CipherTalk/tree/main/CipherTalk-CLI",
+  "homepage": "https://github.com/borisxxz/CipherTalk_borisxxz/tree/main/CipherTalk-CLI",
   "bugs": {
-    "url": "https://github.com/ILoveBingLu/CipherTalk/issues"
+    "url": "https://github.com/borisxxz/CipherTalk_borisxxz/issues"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"

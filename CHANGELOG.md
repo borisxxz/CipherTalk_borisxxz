@@ -279,4 +279,4 @@
 
 ---
 
-更多详细信息请查看 [GitHub Releases](https://github.com/ILoveBingLu/CipherTalk/releases)。
+更多详细信息请查看 [GitHub Releases](https://github.com/borisxxz/CipherTalk_borisxxz/releases)。

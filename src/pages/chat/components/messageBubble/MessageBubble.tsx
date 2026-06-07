@@ -67,6 +67,10 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [voiceDataUrl, setVoiceDataUrl] = useState<string | null>(null)
   const voiceRef = useRef<HTMLAudioElement>(null)
+  const [voiceProgress, setVoiceProgress] = useState(0)
+  const [voiceCurrentTime, setVoiceCurrentTime] = useState(0)
+  const [voiceSpeed, setVoiceSpeed] = useState(() => globalVoiceManager.playbackSpeed)
+  const voiceProgressRef = useRef<HTMLDivElement>(null)
 
   // 语音转文字 (STT) 状态
   const [sttTranscript, setSttTranscript] = useState<string | null>(null)
@@ -456,7 +460,12 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
         setVoicePlaying(false)
         globalVoiceManager.stop(voiceRef.current)
       } else {
-        voiceRef.current.currentTime = 0
+        // 从暂停处恢复，而非从头开始
+        if (voiceRef.current.currentTime > 0 && voiceRef.current.currentTime < voiceRef.current.duration) {
+          // 已暂停且未播放完，恢复播放
+        } else {
+          voiceRef.current.currentTime = 0
+        }
         // 停止其他正在播放的语音，确保同一时间只播放一条
         globalVoiceManager.play(voiceRef.current, () => {
           voiceRef.current?.pause()
@@ -496,12 +505,48 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
     } finally {
       setVoiceLoading(false)
     }
-  }, [voiceLoading, voiceDataUrl, voicePlaying, session.username, message.localId])
+  }, [voiceLoading, voiceDataUrl, voicePlaying, session.username, message.localId, message.createTime, message.serverId])
 
   // 语音播放结束
   const handleVoiceEnded = useCallback(() => {
     setVoicePlaying(false)
+    setVoiceProgress(0)
+    setVoiceCurrentTime(0)
     if (voiceRef.current) globalVoiceManager.stop(voiceRef.current)
+  }, [])
+
+  // 语音播放进度更新
+  const handleVoiceTimeUpdate = useCallback(() => {
+    if (!voiceRef.current) return
+    const audio = voiceRef.current
+    if (audio.duration && isFinite(audio.duration)) {
+      setVoiceProgress((audio.currentTime / audio.duration) * 100)
+    }
+    setVoiceCurrentTime(audio.currentTime)
+  }, [])
+
+  // 语音速度自定义
+  const handleVoiceSpeedChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation()
+    const val = parseFloat(e.target.value)
+    if (!isNaN(val) && val >= 0.1 && val <= 16) {
+      setVoiceSpeed(val)
+      globalVoiceManager.setSpeed(val)
+    }
+  }, [])
+
+  // 进度条点击跳转
+  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation()
+    if (!voiceRef.current || !voiceProgressRef.current) return
+    const audio = voiceRef.current
+    if (!audio.duration || !isFinite(audio.duration)) return
+    const rect = voiceProgressRef.current.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width))
+    audio.currentTime = ratio * audio.duration
+    setVoiceProgress(ratio * 100)
+    setVoiceCurrentTime(audio.currentTime)
   }, [])
 
   // 语音转文字处理
@@ -1315,6 +1360,12 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
       const maxWidth = 200
       const width = Math.min(maxWidth, Math.max(minWidth, minWidth + duration * 10))
 
+      const fmtVoiceTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60)
+        const s = Math.floor(seconds % 60)
+        return `${m}:${String(s).padStart(2, '0')}`
+      }
+
       // 语音图标组件
       const VoiceIcon = () => {
         if (voiceLoading) {
@@ -1368,9 +1419,39 @@ function MessageBubble({ message, session, showTime, myAvatarUrl, isGroupChat, h
                   ref={voiceRef}
                   src={voiceDataUrl}
                   onEnded={handleVoiceEnded}
+                  onTimeUpdate={handleVoiceTimeUpdate}
                   onError={() => setVoiceError('播放失败')}
                 />
               )}
+            </div>
+          </div>
+
+          {/* 播放控制栏：进度条独占一行 + 控制 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 10px', marginTop: 4, minWidth: 320, maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div
+              style={{ width: '100%', height: 14, background: 'rgba(0,0,0,0.1)', borderRadius: 7, cursor: 'pointer', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)' }}
+              ref={voiceProgressRef}
+              onClick={handleProgressClick}
+            >
+              <div style={{ height: '100%', background: isSent ? 'rgba(255,255,255,0.75)' : 'var(--primary, #075e54)', borderRadius: 7, transition: 'width 0.1s linear', width: `${voiceProgress}%`, minWidth: voiceProgress > 0 ? 6 : 0 }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11, color: '#999', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtVoiceTime(voiceCurrentTime)}/{fmtVoiceTime(duration)}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  style={{ width: 44, padding: '2px 4px', border: '1px solid #ddd', borderRadius: 6, background: 'var(--bg-tertiary, #e0e0e0)', color: '#667781', fontSize: 11, textAlign: 'center', outline: 'none', lineHeight: 1.4, MozAppearance: 'textfield' }}
+                  type="number"
+                  min="0.1"
+                  max="16"
+                  step="0.1"
+                  value={voiceSpeed}
+                  onChange={handleVoiceSpeedChange}
+                  onClick={e => e.stopPropagation()}
+                />
+                <span style={{ fontSize: 11, color: '#999' }}>x 倍速</span>
+              </div>
             </div>
           </div>
 

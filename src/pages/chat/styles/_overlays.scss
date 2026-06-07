@@ -363,6 +363,105 @@
   cursor: pointer;
 }
 
+// 语音播放控制栏
+.voice-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px;
+  margin-top: 4px;
+  min-width: 240px;
+  max-width: 320px;
+}
+
+.voice-progress-bar {
+  height: 8px;
+  background: var(--bg-tertiary, #e0e0e0);
+  border-radius: 4px;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+
+  &:hover {
+    height: 10px;
+  }
+
+  .voice-progress-fill {
+    height: 100%;
+    background: var(--primary, #075e54);
+    border-radius: 4px;
+    transition: width 0.1s linear;
+    min-width: 0;
+  }
+}
+
+.voice-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.voice-speed-input {
+  width: 40px;
+  padding: 1px 4px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 6px;
+  background: var(--bg-tertiary, #e0e0e0);
+  color: var(--text-secondary, #667781);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  outline: none;
+  line-height: 1.4;
+  -moz-appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  &:focus {
+    border-color: var(--primary, #075e54);
+    background: var(--bg-primary, #fff);
+  }
+}
+
+.voice-speed-label {
+  font-size: 11px;
+  color: var(--text-tertiary, #999);
+}
+
+.voice-time-display {
+  font-size: 11px;
+  color: var(--text-tertiary, #999);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// 自己发送的语音中控制栏样式调整
+.message-bubble.sent {
+  .voice-progress-fill {
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .voice-speed-input {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.3);
+
+    &:focus {
+      background: rgba(255, 255, 255, 0.35);
+      color: #fff;
+    }
+  }
+
+  .voice-time-display {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}
+
 // 全局禁用视频控件的某些按钮
 video::-webkit-media-controls-overflow-button {
   display: none !important;

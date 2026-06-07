@@ -229,7 +229,7 @@ export function registerSttHandlers(ctx: MainProcessContext): void {
         mkdirSync(gpuDir, { recursive: true })
       }
 
-      const zipUrl = 'https://miyuapp.aiqji.com/whisper.zip'
+      const zipUrl = 'https://github.com/borisxxz/CipherTalk_borisxxz/releases/latest/download/whisper.zip'
       const zipPath = join(gpuDir, 'whisper.zip')
       const tempPath = zipPath + '.tmp'
 

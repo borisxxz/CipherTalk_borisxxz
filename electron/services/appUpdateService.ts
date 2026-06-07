@@ -1,10 +1,10 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
-const GITHUB_OWNER = 'ILoveBingLu'
-const GITHUB_REPO = 'CipherTalk'
+const GITHUB_OWNER = 'borisxxz'
+const GITHUB_REPO = 'CipherTalk_borisxxz'
 const GITHUB_FORCE_UPDATE_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download/force-update.json`
-const FORCE_UPDATE_POLICY_FALLBACK_URL = 'https://miyuapp.aiqji.com'
+const FORCE_UPDATE_POLICY_FALLBACK_URL = 'https://github.com/borisxxz/CipherTalk_borisxxz'
 
 export type ForceUpdateReason = 'minimum-version' | 'blocked-version'
 export type AppUpdateSource = 'github' | 'custom' | 'none'

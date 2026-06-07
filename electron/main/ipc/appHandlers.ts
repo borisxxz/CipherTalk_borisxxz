@@ -39,7 +39,7 @@ export function registerAppHandlers(ctx: MainProcessContext): void {
     return {
       primaryUpdateSource: 'github' as const,
       githubRepository: appUpdateService.getGithubRepository(),
-      policySources: ['github', 'custom'] as const,
+      policySources: ['github'] as const,
       policyPrecedence: 'github' as const,
       forceUpdatePolicyFallbackUrl: appUpdateService.getForceUpdatePolicyFallbackUrl()
     }

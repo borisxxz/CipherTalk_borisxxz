@@ -211,7 +211,7 @@ export interface ElectronAPI {
         owner: string
         repo: string
       }
-      policySources: Array<'github' | 'custom'>
+      policySources: Array<'github'>
       policyPrecedence: 'github'
       forceUpdatePolicyFallbackUrl: string
     }>
@@ -253,7 +253,7 @@ export interface ElectronAPI {
         owner: string
         repo: string
       }
-      policySources: Array<'github' | 'custom'>
+      policySources: Array<'github'>
       policyPrecedence: 'github'
       forceUpdatePolicyFallbackUrl: string
     }>
@@ -955,6 +955,9 @@ export interface ElectronAPI {
       currentSession?: string
       phase?: string
       detail?: string
+      imageMissCount?: number
+      videoMissCount?: number
+      missedImages?: Array<{ createTime: number; sender: string }>
     }) => void) => () => void
   }
   activation: {
@@ -1555,7 +1558,7 @@ export interface ContactExportOptions {
 }
 
 export interface MomentsExportOptions {
-  format: 'json' | 'html' | 'excel'
+  format: 'json' | 'html' | 'excel' | 'chatlab' | 'chatlab-jsonl' | 'txt' | 'sql'
   dateRange?: { start: number; end: number } | null
   usernames?: string[]
 }

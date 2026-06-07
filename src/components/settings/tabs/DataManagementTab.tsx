@@ -9,10 +9,9 @@ import { ConfirmDialog, PathInput, SelectableCard, SettingsField, SettingsSectio
 interface DataManagementTabProps {
   showMessage: (text: string, success: boolean) => void
   reloadConfig: () => Promise<unknown>
-  onClearCurrentAccountConfig: (deleteLocalData?: boolean) => void
 }
 
-function DataManagementTab({ showMessage, reloadConfig, onClearCurrentAccountConfig }: DataManagementTabProps) {
+function DataManagementTab({ showMessage, reloadConfig }: DataManagementTabProps) {
   const exportPath = useSettingsStore(s => s.config.exportPath)
   const exportDefaultDateRange = useSettingsStore(s => s.config.exportDefaultDateRange)
   const setField = useSettingsStore(s => s.setField)
@@ -169,7 +168,7 @@ function DataManagementTab({ showMessage, reloadConfig, onClearCurrentAccountCon
   const handleClearAllCache = () => setShowClearDialog({ type: 'all', title: '清除所有', message: '此操作将删除所有缓存数据（包括解密后的图片、表情包、数据库文件），清除后无法恢复。确定要继续吗？' })
   const handleClearCurrentAccount = () => setShowClearDialog({ type: 'currentAccount', title: '清除当前账号', message: '此操作将清除当前账号的密钥、路径等配置，不影响其他账号。确定要继续吗？' })
   const handleClearAllAccounts = () => setShowClearDialog({ type: 'allAccounts', title: '清空全部账号配置', message: '此操作将删除所有账号配置和账号级密钥/路径信息，不删除全局主题、AI、MCP、HTTP API 等通用设置。确定要继续吗？' })
-  const handleClearCurrentAccountConfig = onClearCurrentAccountConfig
+  const handleClearCurrentAccountWithData = () => setShowClearDialog({ type: 'currentAccount', title: '删除当前账号并清理数据', message: '此操作将清除当前账号配置并删除对应的本地解密数据库缓存，不影响其他账号。确定要继续吗？' })
 
   const confirmClear = async () => {
     if (!showClearDialog) return
@@ -180,7 +179,7 @@ function DataManagementTab({ showMessage, reloadConfig, onClearCurrentAccountCon
         case 'emojis': result = await window.electronAPI.cache.clearEmojis(); break
         case 'databases': result = await window.electronAPI.cache.clearDatabases(); break
         case 'all': result = await window.electronAPI.cache.clearAll(); break
-        case 'currentAccount': result = await window.electronAPI.cache.clearCurrentAccount(false); break
+        case 'currentAccount': result = await window.electronAPI.cache.clearCurrentAccount(showClearDialog.title.includes('清理数据')); break
         case 'allAccounts': result = await window.electronAPI.cache.clearAllAccountConfigs(); break
       }
       if (result.success) {
@@ -291,7 +290,7 @@ function DataManagementTab({ showMessage, reloadConfig, onClearCurrentAccountCon
                 <button type="button" className="btn btn-secondary cache-card-btn" onClick={handleClearCurrentAccount}>
                   <Trash2 size={14} /> 清除当前账号
                 </button>
-                <button type="button" className="btn btn-secondary cache-card-btn" onClick={handleClearCurrentAccountConfig.bind(null, true)}>
+                <button type="button" className="btn btn-secondary cache-card-btn" onClick={handleClearCurrentAccountWithData}>
                   <Trash2 size={14} /> 删除当前账号并清理数据
                 </button>
                 <button type="button" className="btn btn-danger cache-card-btn" onClick={handleClearAllAccounts}>

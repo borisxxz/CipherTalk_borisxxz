@@ -109,7 +109,7 @@ export function ShareModal({ message, userMessage, aiProvider, onClose }: Props)
 
             {/* 底部品牌栏 */}
             <div className="share-card__footer">
-              <span className="share-card__brand">CipherTalk · miyu.aiqji.com</span>
+              <span className="share-card__brand">CipherTalk · github.com/borisxxz/CipherTalk_borisxxz</span>
             </div>
 
           </div>

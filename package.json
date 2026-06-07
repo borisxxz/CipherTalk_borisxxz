@@ -2,7 +2,7 @@
   "name": "ciphertalk",
   "version": "6.0.8",
   "description": "密语 - 微信聊天记录查看工具",
-  "author": "ILoveBingLu",
+  "author": "borisxxz",
   "license": "CC-BY-NC-SA-4.0",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -122,8 +122,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "ILoveBingLu",
-      "repo": "CipherTalk",
+      "owner": "borisxxz",
+      "repo": "CipherTalk_borisxxz",
       "publishAutoUpdate": false
     },
     "win": {

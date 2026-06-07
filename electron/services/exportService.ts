@@ -110,7 +110,7 @@ export interface ContactExportOptions {
 }
 
 export interface MomentsExportOptions {
-  format: 'json' | 'html' | 'excel'
+  format: 'json' | 'html' | 'excel' | 'chatlab' | 'chatlab-jsonl' | 'txt' | 'sql'
   dateRange?: { start: number; end: number } | null
   usernames?: string[]
 }
@@ -137,6 +137,9 @@ export interface ExportProgress {
   currentSession: string
   phase: 'preparing' | 'exporting' | 'writing' | 'complete'
   detail?: string
+  imageMissCount?: number
+  videoMissCount?: number
+  missedImages?: Array<{ createTime: number; sender: string }>
 }
 
 class ExportService {
@@ -2513,6 +2516,9 @@ class ExportService {
         // 先导出媒体文件，收集路径映射表
         let mediaPathMap: Map<number, string> | undefined
         let voicePathMap: Map<number, string> | undefined
+        let currentImageMissCount = 0
+        let currentVideoMissCount = 0
+        let currentMissedImages: Array<{ createTime: number; sender: string }> = []
         if (hasMedia) {
           try {
             const mediaResult = await this.exportMediaFiles(sessionId, safeName, sessionOutputDir, options, (detail) => {
@@ -2526,6 +2532,24 @@ class ExportService {
             })
             mediaPathMap = mediaResult.mediaPathMap
             voicePathMap = mediaResult.voicePathMap
+            currentImageMissCount = mediaResult.imageMissCount
+            currentVideoMissCount = mediaResult.videoMissCount
+            currentMissedImages = mediaResult.missedImages
+            if (currentImageMissCount > 0 || currentVideoMissCount > 0) {
+              const missParts: string[] = []
+              if (currentImageMissCount > 0) missParts.push(`${currentImageMissCount} 张图片未找到`)
+              if (currentVideoMissCount > 0) missParts.push(`${currentVideoMissCount} 个视频未找到`)
+              onProgress?.({
+                current: i + 1,
+                total: sessionIds.length,
+                currentSession: sessionInfo.displayName,
+                phase: 'writing',
+                detail: missParts.join('，'),
+                imageMissCount: currentImageMissCount,
+                videoMissCount: currentVideoMissCount,
+                missedImages: currentMissedImages
+              })
+            }
           } catch (e) {
             console.error(`导出 ${sessionId} 媒体文件失败:`, e)
           }
@@ -2630,6 +2654,10 @@ class ExportService {
       let ext = '.json'
       if (options.format === 'html') ext = '.html'
       else if (options.format === 'excel') ext = '.xlsx'
+      else if (options.format === 'chatlab') ext = '.json'
+      else if (options.format === 'chatlab-jsonl') ext = '.jsonl'
+      else if (options.format === 'txt') ext = '.txt'
+      else if (options.format === 'sql') ext = '.sql'
       const outputPath = path.join(outputDir, `朋友圈导出_${timestamp}${ext}`)
 
       // 统一处理：所有格式都消费同一份处理过的数据
@@ -2645,6 +2673,14 @@ class ExportService {
         fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), 'utf-8')
       } else if (options.format === 'html') {
         fs.writeFileSync(outputPath, this.buildMomentsHtml(items), 'utf-8')
+      } else if (options.format === 'chatlab') {
+        this.writeMomentsChatLab(items, outputPath)
+      } else if (options.format === 'chatlab-jsonl') {
+        this.writeMomentsChatLabJsonl(items, outputPath)
+      } else if (options.format === 'txt') {
+        this.writeMomentsTxt(items, outputPath)
+      } else if (options.format === 'sql') {
+        this.writeMomentsSql(items, outputPath)
       } else {
         await this.writeMomentsExcel(items, outputPath)
       }
@@ -2805,6 +2841,235 @@ class ExportService {
     await workbook.xlsx.writeFile(outputPath)
   }
 
+  private writeMomentsTxt(items: MomentExportItem[], outputPath: string): void {
+    const lines: string[] = []
+    for (const p of items) {
+      lines.push(`[${p.formattedTime}]`)
+      lines.push(p.nickname)
+      if (p.content) {
+        lines.push(p.content)
+      }
+      if (p.mediaCount > 0) {
+        const imageCount = p.media.filter(m => m.type === 'image').length
+        const videoCount = p.media.filter(m => m.type === 'video').length
+        const parts: string[] = []
+        if (imageCount > 0) parts.push(`图片 x${imageCount}`)
+        if (videoCount > 0) parts.push(`视频 x${videoCount}`)
+        lines.push(`[${parts.join(', ')}]`)
+      }
+      if (p.likes.length > 0) {
+        lines.push(`点赞: ${p.likes.join(', ')}`)
+      }
+      if (p.comments.length > 0) {
+        for (const c of p.comments) {
+          if (c.replyTo) {
+            lines.push(`评论: ${c.nickname} 回复 ${c.replyTo}: ${c.content}`)
+          } else {
+            lines.push(`评论: ${c.nickname}: ${c.content}`)
+          }
+        }
+      }
+      lines.push('---')
+    }
+    fs.writeFileSync(outputPath, lines.join('\n'), 'utf-8')
+  }
+
+  private writeMomentsChatLab(items: MomentExportItem[], outputPath: string): void {
+    const members = new Map<string, ChatLabMember>()
+    for (const p of items) {
+      if (!members.has(p.username)) {
+        members.set(p.username, {
+          platformId: p.username,
+          accountName: p.nickname
+        })
+      }
+      for (const c of p.comments) {
+        if (!members.has(c.nickname)) {
+          members.set(c.nickname, {
+            platformId: c.nickname,
+            accountName: c.nickname
+          })
+        }
+      }
+    }
+
+    const messages: ChatLabMessage[] = items.map((p, i) => {
+      let content = p.content
+      if (p.mediaCount > 0) {
+        const mediaParts = p.media.map(m => `[${m.type === 'video' ? '视频' : '图片'}]`)
+        content = (content ? content + '\n' : '') + mediaParts.join('')
+      }
+      if (p.comments.length > 0) {
+        const commentParts = p.comments.map(c =>
+          c.replyTo ? `${c.nickname} 回复 ${c.replyTo}: ${c.content}` : `${c.nickname}: ${c.content}`
+        )
+        content = (content ? content + '\n' : '') + '评论:\n' + commentParts.join('\n')
+      }
+      if (p.likes.length > 0) {
+        content = (content ? content + '\n' : '') + '点赞: ' + p.likes.join(', ')
+      }
+      return {
+        sender: p.username,
+        accountName: p.nickname,
+        timestamp: p.createTime,
+        type: 1,
+        content: content || null,
+        platformMessageId: p.id
+      }
+    })
+
+    const data = {
+      chatlab: {
+        version: '0.0.2',
+        exportedAt: Math.floor(Date.now() / 1000),
+        generator: 'CipherTalk',
+        description: '朋友圈导出'
+      },
+      meta: {
+        name: '朋友圈',
+        platform: 'wechat',
+        type: 'moments' as string
+      },
+      members: Array.from(members.values()),
+      messages
+    }
+    fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), 'utf-8')
+  }
+
+  private writeMomentsChatLabJsonl(items: MomentExportItem[], outputPath: string): void {
+    const members = new Map<string, ChatLabMember>()
+    for (const p of items) {
+      if (!members.has(p.username)) {
+        members.set(p.username, {
+          platformId: p.username,
+          accountName: p.nickname
+        })
+      }
+      for (const c of p.comments) {
+        if (!members.has(c.nickname)) {
+          members.set(c.nickname, {
+            platformId: c.nickname,
+            accountName: c.nickname
+          })
+        }
+      }
+    }
+
+    const lines: string[] = []
+    lines.push(JSON.stringify({
+      _type: 'header',
+      chatlab: {
+        version: '0.0.2',
+        exportedAt: Math.floor(Date.now() / 1000),
+        generator: 'CipherTalk',
+        description: '朋友圈导出'
+      },
+      meta: {
+        name: '朋友圈',
+        platform: 'wechat',
+        type: 'moments'
+      }
+    }))
+    for (const member of members.values()) {
+      lines.push(JSON.stringify({ _type: 'member', ...member }))
+    }
+    for (const p of items) {
+      let content = p.content
+      if (p.mediaCount > 0) {
+        const mediaParts = p.media.map(m => `[${m.type === 'video' ? '视频' : '图片'}]`)
+        content = (content ? content + '\n' : '') + mediaParts.join('')
+      }
+      if (p.comments.length > 0) {
+        const commentParts = p.comments.map(c =>
+          c.replyTo ? `${c.nickname} 回复 ${c.replyTo}: ${c.content}` : `${c.nickname}: ${c.content}`
+        )
+        content = (content ? content + '\n' : '') + '评论:\n' + commentParts.join('\n')
+      }
+      if (p.likes.length > 0) {
+        content = (content ? content + '\n' : '') + '点赞: ' + p.likes.join(', ')
+      }
+      lines.push(JSON.stringify({
+        _type: 'message',
+        sender: p.username,
+        accountName: p.nickname,
+        timestamp: p.createTime,
+        type: 1,
+        content: content || null,
+        platformMessageId: p.id
+      }))
+    }
+    fs.writeFileSync(outputPath, lines.join('\n'), 'utf-8')
+  }
+
+  private writeMomentsSql(items: MomentExportItem[], outputPath: string): void {
+    const now = Math.floor(Date.now() / 1000)
+    const timestamp = new Date().toISOString().replace('T', ' ').replace(/\..+/, '')
+    const lines: string[] = []
+
+    lines.push('-- ============================================================')
+    lines.push('-- 密语 CipherTalk - 朋友圈导出')
+    lines.push(`-- 生成时间: ${timestamp}`)
+    lines.push(`-- 朋友圈数: ${items.length}`)
+    lines.push('-- PostgreSQL 兼容 SQL 脚本')
+    lines.push('-- ============================================================')
+    lines.push('')
+
+    lines.push('CREATE TABLE IF NOT EXISTS moments (')
+    lines.push('  id TEXT PRIMARY KEY,')
+    lines.push('  username TEXT NOT NULL,')
+    lines.push('  nickname TEXT,')
+    lines.push('  content TEXT,')
+    lines.push('  create_time BIGINT NOT NULL,')
+    lines.push('  formatted_time TEXT,')
+    lines.push('  media_count INTEGER DEFAULT 0,')
+    lines.push('  likes TEXT,')
+    lines.push('  comments TEXT')
+    lines.push(');')
+    lines.push('')
+
+    lines.push('CREATE INDEX IF NOT EXISTS idx_moments_create_time ON moments(create_time);')
+    lines.push('CREATE INDEX IF NOT EXISTS idx_moments_username ON moments(username);')
+    lines.push('')
+
+    lines.push('-- 清空旧数据')
+    lines.push('DELETE FROM moments;')
+    lines.push('')
+
+    if (items.length > 0) {
+      lines.push('-- 插入朋友圈数据')
+      const BATCH_SIZE = 500
+      for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE)
+        const valueRows = batch.map(p => {
+          const vals = [
+            this.escapeSql(p.id),
+            this.escapeSql(p.username),
+            this.escapeSql(p.nickname),
+            this.escapeSql(p.content),
+            String(p.createTime),
+            this.escapeSql(p.formattedTime),
+            String(p.mediaCount),
+            this.escapeSql(JSON.stringify(p.likes)),
+            this.escapeSql(JSON.stringify(p.comments.map(c => ({
+              nickname: c.nickname,
+              content: c.content,
+              replyTo: c.replyTo
+            }))))
+          ]
+          return `(${vals.join(', ')})`
+        })
+        lines.push(`INSERT INTO moments (id, username, nickname, content, create_time, formatted_time, media_count, likes, comments) VALUES`)
+        lines.push(valueRows.join(',\n') + ';')
+        lines.push('')
+      }
+    }
+
+    lines.push('-- 导出完成')
+    lines.push(`-- 朋友圈: ${items.length} 条`)
+
+    fs.writeFileSync(outputPath, lines.join('\n'), 'utf-8')
+  }
+
   /**
    * 导出会话的媒体文件（图片和视频）
    */
@@ -2814,14 +3079,14 @@ class ExportService {
     outputDir: string,
     options: ExportOptions,
     onDetail?: (detail: string) => void
-  ): Promise<{ mediaPathMap: Map<number, string>; voicePathMap: Map<number, string> }> {
+  ): Promise<{ mediaPathMap: Map<number, string>; voicePathMap: Map<number, string>; imageMissCount: number; videoMissCount: number; missedImages: Array<{ createTime: number; sender: string }> }> {
     // mediaPathMap：图片/视频/表情用 createTime → 相对路径
     // voicePathMap：语音用 localId → 相对路径（避免同时间戳冲突）
     const mediaPathMap = new Map<number, string>()
     const voicePathMap = new Map<number, string>()
 
     const dbTablePairs = await this.findSessionTables(sessionId)
-    if (dbTablePairs.length === 0) return { mediaPathMap, voicePathMap }
+    if (dbTablePairs.length === 0) return { mediaPathMap, voicePathMap, imageMissCount: 0, videoMissCount: 0, missedImages: [] }
 
     // 创建媒体输出目录（直接在会话文件夹下创建子目录）
     const imageOutDir = options.exportImages ? path.join(outputDir, 'images') : ''
@@ -2843,6 +3108,9 @@ class ExportService {
     let emojiCount = 0
     let emojiTotal = 0
     let emojiProcessed = 0
+    let imageMissCount = 0
+    let videoMissCount = 0
+    const missedImages: Array<{ createTime: number; sender: string }> = []
 
     // 是否需要处理图片/视频/表情
     const needMedia = options.exportImages || options.exportVideos || options.exportEmojis
@@ -2923,11 +3191,21 @@ class ExportService {
                         imageCount++
                         mediaPathMap.set(createTime, `images/${df}/${fileName}`)
                       }
+                    } else {
+                      imageMissCount++
+                      missedImages.push({ createTime, sender: row.talker || '' })
                     }
+                  } else {
+                    imageMissCount++
+                    missedImages.push({ createTime, sender: row.talker || '' })
                   }
+                } else {
+                  imageMissCount++
+                  missedImages.push({ createTime, sender: row.talker || '' })
                 }
               } catch (e) {
-                // 跳过单张图片的错误
+                imageMissCount++
+                missedImages.push({ createTime, sender: row.talker || '' })
               }
             }
 
@@ -2950,11 +3228,17 @@ class ExportService {
                         videoCount++
                         mediaPathMap.set(createTime, `videos/${df}/${fileName}`)
                       }
+                    } else {
+                      videoMissCount++
                     }
+                  } else {
+                    videoMissCount++
                   }
+                } else {
+                  videoMissCount++
                 }
               } catch (e) {
-                // 跳过单个视频的错误
+                videoMissCount++
               }
             }
 
@@ -3268,10 +3552,12 @@ class ExportService {
     if (videoCount > 0) parts.push(`${videoCount} 个视频`)
     if (emojiCount > 0) parts.push(`${emojiCount} 个表情`)
     if (voiceCount > 0) parts.push(`${voiceCount} 条语音`)
+    if (imageMissCount > 0) parts.push(`${imageMissCount} 张图片未找到`)
+    if (videoMissCount > 0) parts.push(`${videoMissCount} 个视频未找到`)
     const summary = parts.length > 0 ? `媒体导出完成: ${parts.join(', ')}` : '无媒体文件'
     onDetail?.(summary)
     console.log(`[Export] ${sessionId} ${summary}`)
-    return { mediaPathMap, voicePathMap }
+    return { mediaPathMap, voicePathMap, imageMissCount, videoMissCount, missedImages }
   }
 
   private dateFolder(ts: number): string {

@@ -52,8 +52,8 @@ const aiApiUrl = process.env.AI_API_URL || localSecrets.AI_API_URL || 'https://a
 const aiModel = process.env.AI_MODEL || localSecrets.AI_MODEL || 'gpt-5.4'
 const PRODUCT_NAME = 'CipherTalk'
 
-const PRIMARY_AUTHOR_LOGINS = new Set(['ILoveBingLu'])
-const PRIMARY_AUTHOR_NAMES = new Set(['ILoveBingLu', 'BingLu', 'ILoveBinglu'])
+const PRIMARY_AUTHOR_LOGINS = new Set(['borisxxz'])
+const PRIMARY_AUTHOR_NAMES = new Set(['borisxxz', 'borisxxz'])
 
 function isPrimaryAuthor(person) {
   if (!person) return false
@@ -219,7 +219,7 @@ async function generateAiBody(context) {
     '引用规则：',
     '有 PR 时优先引用 PR 标题；没有 PR 时才引用 commit 标题。',
     '列表尽量短：最多每类列出 5 条最关键的标题；其余可在导语或“这次更新”里用一句话说明总量。',
-    '感谢规则：只有非主作者的 PR/commit 才出现在感谢段；主作者按代码中的逻辑是 ILoveBingLu（及其大小写/拼写变体）相关。',
+    '感谢规则：只有非主作者的 PR/commit 才出现在感谢段；主作者按代码中的逻辑是 borisxxz 相关。',
     '不要写猜测：如果输入里没有足够信息，就明确说这次以内部整理、稳定性、发布链路或工程维护为主。',
     '不要输出代码块，不要输出 JSON，不要套娃标题。'
   ].join('\n')

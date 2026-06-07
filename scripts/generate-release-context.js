@@ -4,8 +4,8 @@ const { execSync } = require('child_process')
 
 const rootDir = path.resolve(__dirname, '..')
 const releaseDir = path.join(rootDir, 'release')
-const owner = process.env.GITHUB_REPOSITORY_OWNER || 'ILoveBingLu'
-const repo = (process.env.GITHUB_REPOSITORY || `${owner}/CipherTalk`).split('/')[1] || 'CipherTalk'
+const owner = process.env.GITHUB_REPOSITORY_OWNER || 'borisxxz'
+const repo = (process.env.GITHUB_REPOSITORY || `${owner}/CipherTalk_borisxxz`).split('/')[1] || 'CipherTalk'
 const currentTag = process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME || ''
 const pkg = require(path.join(rootDir, 'package.json'))
 

@@ -71,7 +71,7 @@ function AboutTab({
         <div className="github-capsules">
           <button
             className="btn btn-secondary github-link-btn"
-            onClick={() => window.electronAPI.shell.openExternal('https://github.com/ILoveBingLu/miyu')}
+            onClick={() => window.electronAPI.shell.openExternal('https://github.com/borisxxz/CipherTalk_borisxxz')}
           >
             <Github size={16} />
             <span>密语 CipherTalk</span>
@@ -90,9 +90,9 @@ function AboutTab({
         </p>
 
         <div className="about-links">
-          <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://miyu.aiqji.com') }}>官网</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://github.com/borisxxz/CipherTalk_borisxxz') }}>GitHub</a>
           <span>·</span>
-          <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://chatlab.fun') }}>ChatLab</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.shell.openExternal('https://github.com/borisxxz/CipherTalk_borisxxz') }}>CipherTalk</a>
           <span>·</span>
           <a href="#" onClick={(e) => { e.preventDefault(); window.electronAPI.window.openAgreementWindow() }}>用户协议</a>
         </div>

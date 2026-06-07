@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
-import {
-  Home, MessageSquare, BarChart3, Users, FileText, Database, Settings,
-  Download, Aperture, Network, Bot, FileAudio, Boxes,
-  type LucideIcon
-} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import MacOSDock, { type DockApp } from '@/components/ui/mac-os-dock'
 import { useThemeStore } from '@/stores/themeStore'
+import { NAV_ITEMS } from './navConfig'
 
 const HIDE_DELAY = 2500
 const EDGE_TRIGGER_PX = 8
@@ -32,8 +29,43 @@ function AppIcon({ Icon, gradient }: AppIconProps) {
   )
 }
 
-const makeIcon = (Icon: LucideIcon, gradient: string): ReactNode => (
-  <AppIcon Icon={Icon} gradient={gradient} />
+const ICON_GRADIENTS: Record<string, string> = {
+  home:                   'linear-gradient(135deg, #4A90E2 0%, #2E6BC9 100%)',
+  chat:                   'linear-gradient(135deg, #2ECC71 0%, #27AE60 100%)',
+  moments:                'linear-gradient(135deg, #FF7AA2 0%, #E84B7E 100%)',
+  analytics:              'linear-gradient(135deg, #9B59B6 0%, #7A3FA0 100%)',
+  'group-analytics':      'linear-gradient(135deg, #F39C12 0%, #D67E0E 100%)',
+  'annual-report':        'linear-gradient(135deg, #E74C3C 0%, #C0392B 100%)',
+  'transcription-assistant': 'linear-gradient(135deg, #5B6CFF 0%, #3F50E0 100%)',
+  export:                 'linear-gradient(135deg, #1ABC9C 0%, #16A085 100%)',
+  'data-management':      'linear-gradient(135deg, #607D8B 0%, #455A64 100%)',
+  'open-api':             'linear-gradient(135deg, #00BCD4 0%, #0097A7 100%)',
+  mcp:                    'linear-gradient(135deg, #EC407A 0%, #C2185B 100%)',
+  agent:                  'linear-gradient(135deg, #7E57C2 0%, #5E35B1 100%)',
+  settings:               'linear-gradient(135deg, #6E7B85 0%, #424A52 100%)',
+}
+
+const makeIcon = (Icon: LucideIcon, gradient: string, popOut?: boolean): ReactNode => (
+  <div className="relative w-full h-full">
+    <div
+      className="w-full h-full flex items-center justify-center"
+      style={{
+        background: gradient,
+        borderRadius: '28%',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.15)'
+      }}
+    >
+      <Icon className="w-[58%] h-[58%] text-white" strokeWidth={2} />
+    </div>
+    {popOut && (
+      <span
+        className="absolute -top-0.5 -right-0.5 text-[8px] leading-none text-white/70"
+        style={{ textShadow: '0 0 2px rgba(0,0,0,0.6)' }}
+      >
+        ↗
+      </span>
+    )}
+  </div>
 )
 
 function BottomDock() {
@@ -93,52 +125,25 @@ function BottomDock() {
     scheduleHide()
   }
 
-  const openChatWindow = async () => {
-    try { await window.electronAPI.window.openChatWindow() }
-    catch (e) { console.error('打开聊天窗口失败:', e) }
-  }
-
-  const openGroupAnalyticsWindow = async () => {
-    try { await window.electronAPI.window.openGroupAnalyticsWindow() }
-    catch (e) { console.error('打开群聊分析窗口失败:', e) }
-  }
-
-  const openMomentsWindow = async () => {
-    try { await window.electronAPI.window.openMomentsWindow() }
-    catch (e) { console.error('打开朋友圈窗口失败:', e) }
-  }
-
-  const apps: DockApp[] = [
-    { id: 'home', name: '首页', icon: makeIcon(Home, 'linear-gradient(135deg, #4A90E2 0%, #2E6BC9 100%)') },
-    { id: 'chat', name: '聊天查看', icon: makeIcon(MessageSquare, 'linear-gradient(135deg, #2ECC71 0%, #27AE60 100%)') },
-    { id: 'moments', name: '朋友圈', icon: makeIcon(Aperture, 'linear-gradient(135deg, #FF7AA2 0%, #E84B7E 100%)') },
-    { id: 'analytics', name: '私聊分析', icon: makeIcon(BarChart3, 'linear-gradient(135deg, #9B59B6 0%, #7A3FA0 100%)') },
-    { id: 'group-analytics', name: '群聊分析', icon: makeIcon(Users, 'linear-gradient(135deg, #F39C12 0%, #D67E0E 100%)') },
-    { id: 'annual-report', name: '年度报告', icon: makeIcon(FileText, 'linear-gradient(135deg, #E74C3C 0%, #C0392B 100%)') },
-    { id: 'transcription', name: '转文字助手', icon: makeIcon(FileAudio, 'linear-gradient(135deg, #5B6CFF 0%, #3F50E0 100%)') },
-    { id: 'export', name: '导出数据', icon: makeIcon(Download, 'linear-gradient(135deg, #1ABC9C 0%, #16A085 100%)') },
-    { id: 'data-management', name: '数据管理', icon: makeIcon(Database, 'linear-gradient(135deg, #607D8B 0%, #455A64 100%)') },
-    { id: 'open-api', name: '开放接口', icon: makeIcon(Network, 'linear-gradient(135deg, #00BCD4 0%, #0097A7 100%)') },
-    { id: 'mcp', name: 'MCP & Skills', icon: makeIcon(Boxes, 'linear-gradient(135deg, #EC407A 0%, #C2185B 100%)') },
-    { id: 'agent', name: 'Agent', icon: makeIcon(Bot, 'linear-gradient(135deg, #7E57C2 0%, #5E35B1 100%)') },
-    { id: 'settings', name: '设置', icon: makeIcon(Settings, 'linear-gradient(135deg, #6E7B85 0%, #424A52 100%)') },
-  ]
+  const apps: DockApp[] = NAV_ITEMS.map(item => ({
+    id: item.id,
+    name: item.popOutIcon ? `${item.label} ↗` : item.label,
+    icon: makeIcon(item.icon, ICON_GRADIENTS[item.id] ?? 'linear-gradient(135deg, #888 0%, #666 100%)', item.popOutIcon),
+  }))
 
   const handleAppClick = (appId: string) => {
-    switch (appId) {
-      case 'home': navigate('/home'); break
-      case 'chat': void openChatWindow(); break
-      case 'moments': void openMomentsWindow(); break
-      case 'analytics': navigate('/analytics'); break
-      case 'group-analytics': void openGroupAnalyticsWindow(); break
-      case 'annual-report': navigate('/annual-report'); break
-      case 'transcription': navigate('/transcription-assistant'); break
-      case 'export': navigate('/export'); break
-      case 'data-management': navigate('/data-management'); break
-      case 'open-api': navigate('/open-api'); break
-      case 'mcp': navigate('/mcp'); break
-      case 'agent': navigate('/agent'); break
-      case 'settings': navigate('/settings'); break
+    const item = NAV_ITEMS.find(n => n.id === appId)
+    if (!item) return
+
+    if (item.target === 'route') {
+      navigate(item.route!)
+    } else {
+      const methodName = `open${item.windowAction}` as keyof typeof window.electronAPI.window
+      try {
+        void (window.electronAPI.window[methodName] as () => Promise<void>)()
+      } catch (e) {
+        console.error(`打开窗口失败 (${item.label}):`, e)
+      }
     }
   }
 
