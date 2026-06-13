@@ -71,6 +71,7 @@ interface SnsPost {
     md5?: string
     token?: string
     key?: string
+    thumbKey?: string
     encIdx?: string
     livePhoto?: {
       url: string
@@ -125,7 +126,7 @@ interface SnsComment {
 
 const isVideoUrl = (url: string) => {
   if (!url) return false
-  return url.includes('snsvideodownload') || url.includes('video') || url.includes('.mp4')
+  return url.includes('snsvideodownload') || url.includes('stodownload') || url.includes('video') || url.includes('.mp4')
 }
 
 const formatXml = (xml: string) => {
@@ -842,6 +843,8 @@ function MomentsWindow() {
   const [exportOptions, setExportOptions] = useState({
     includeImages: true
   })
+  const [exportSelectedUsernames, setExportSelectedUsernames] = useState<string[]>([])
+  const [exportContactSearch, setExportContactSearch] = useState('')
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, status: '' })
   const [hasMore, setHasMore] = useState(true)
   const [hasNewer, setHasNewer] = useState(false)
@@ -1055,6 +1058,20 @@ function MomentsWindow() {
     )
   }
 
+  const toggleExportUserSelection = (username: string) => {
+    setExportSelectedUsernames(prev =>
+      prev.includes(username)
+        ? prev.filter(u => u !== username)
+        : [...prev, username]
+    )
+  }
+
+  const openExportOptions = () => {
+    setExportSelectedUsernames(selectedUsernames)
+    setExportContactSearch('')
+    setShowExportOptions(true)
+  }
+
   const clearFilters = () => {
     setSearchKeyword('')
     setSelectedUsernames([])
@@ -1094,7 +1111,7 @@ function MomentsWindow() {
       while (hasMoreData) {
         const res = await window.electronAPI.sns.getTimeline(
           batchSize, offset,
-          selectedUsernames.length > 0 ? selectedUsernames : undefined,
+          exportSelectedUsernames.length > 0 ? exportSelectedUsernames : undefined,
           searchKeyword || undefined,
           startTs,
           endTs
@@ -1135,7 +1152,13 @@ function MomentsWindow() {
               const thumbUrl = m.thumb || m.url
               if (thumbUrl && !mediaUrlSet.has(thumbUrl)) {
                 mediaUrlSet.add(thumbUrl)
-                allMediaUrls.push({ url: thumbUrl, key: m.key, type: 'media', md5: m.md5 })
+                const isThumbUrl = Boolean(m.thumb && m.thumb !== m.url)
+                allMediaUrls.push({
+                  url: thumbUrl,
+                  key: isThumbUrl ? (m.thumbKey || m.key) : m.key,
+                  type: 'media',
+                  md5: isThumbUrl ? undefined : m.md5
+                })
               }
               // 普通视频
               if (m.url && isVideoUrl(m.url) && m.url !== thumbUrl && !mediaUrlSet.has(m.url)) {
@@ -1306,13 +1329,18 @@ function MomentsWindow() {
 
         let shareHtml = ''
         if (p.shareInfo) {
-          shareHtml = `<a class="lk" href="${escHtml(p.shareInfo.contentUrl)}" target="_blank">
+          const isInternalCdn = /wxapp\.tc\.qq\.com|snsvideodownload|stodownload/.test(p.shareInfo.contentUrl)
+          const linkTag = isInternalCdn
+            ? `<div class="lk">`
+            : `<a class="lk" href="${escHtml(p.shareInfo.contentUrl)}" target="_blank">`
+          const closeTag = isInternalCdn ? `</div>` : `</a>`
+          shareHtml = `${linkTag}
             <div class="lk-body">
               <div class="lk-t">${escHtml(p.shareInfo.title || '查看链接')}</div>
               ${p.shareInfo.description ? `<div class="lk-d">${escHtml(p.shareInfo.description)}</div>` : ''}
             </div>
-            <span class="lk-a">›</span>
-          </a>`
+            ${isInternalCdn ? '' : '<span class="lk-a">›</span>'}
+          ${closeTag}`
         }
 
         let likesHtml = ''
@@ -1585,11 +1613,16 @@ document.querySelectorAll('.vi video').forEach(function(v) {
         setExportProgress({ current: 0, total: 0, status: '' })
       }, 3000)
     }
-  }, [exporting, selectedUsernames, searchKeyword, exportOptions, exportDateRange])
+  }, [exporting, exportSelectedUsernames, searchKeyword, exportOptions, exportDateRange])
 
   const filteredContacts = contacts.filter(c =>
     c.displayName.toLowerCase().includes(contactSearch.toLowerCase()) ||
     c.username.toLowerCase().includes(contactSearch.toLowerCase())
+  )
+
+  const filteredExportContacts = contacts.filter(c =>
+    c.displayName.toLowerCase().includes(exportContactSearch.toLowerCase()) ||
+    c.username.toLowerCase().includes(exportContactSearch.toLowerCase())
   )
 
   return (
@@ -1600,7 +1633,7 @@ document.querySelectorAll('.vi video').forEach(function(v) {
         variant="standalone"
         rightContent={
           <div className="title-actions">
-            <button className="export-btn" onClick={() => setShowExportOptions(true)} data-tooltip="导出">
+            <button className="export-btn" onClick={openExportOptions} data-tooltip="导出">
               <FileDown size={14} />
               <span>导出</span>
             </button>
@@ -2005,6 +2038,49 @@ document.querySelectorAll('.vi video').forEach(function(v) {
                   </div>
                 ) : (
                   <div className="export-settings-view">
+                    <div className="setting-group export-target-group">
+                      <label className="group-title">导出对象</label>
+                      <div className="export-target-summary">
+                        <span>{exportSelectedUsernames.length > 0 ? `已选择 ${exportSelectedUsernames.length} 位联系人` : '导出全部朋友圈动态'}</span>
+                        {exportSelectedUsernames.length > 0 && (
+                          <button type="button" onClick={() => setExportSelectedUsernames([])}>清除选择</button>
+                        )}
+                      </div>
+                      <div className="export-contact-search">
+                        <Search size={13} />
+                        <input
+                          type="text"
+                          placeholder="搜索联系人后点击选择..."
+                          value={exportContactSearch}
+                          onChange={e => setExportContactSearch(e.target.value)}
+                        />
+                        {exportContactSearch && (
+                          <button type="button" onClick={() => setExportContactSearch('')}>
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="export-contact-list custom-scrollbar">
+                        {filteredExportContacts.map(contact => (
+                          <button
+                            type="button"
+                            key={contact.username}
+                            className={`export-contact-item ${exportSelectedUsernames.includes(contact.username) ? 'active' : ''}`}
+                            onClick={() => toggleExportUserSelection(contact.username)}
+                          >
+                            <span className="contact-avatar">
+                              {contact.avatarUrl ? <img src={contact.avatarUrl} alt="" /> : contact.displayName[0]}
+                            </span>
+                            <span className="contact-label">{contact.displayName}</span>
+                          </button>
+                        ))}
+                        {filteredExportContacts.length === 0 && (
+                          <div className="export-contact-empty">无匹配联系人</div>
+                        )}
+                      </div>
+                      <div className="setting-hint">不选择联系人时导出全部动态；选择后只导出这些联系人。</div>
+                    </div>
+
                     <div className="setting-group">
                       <label className="group-title">时间范围 (可选)</label>
                       <div className="time-options">

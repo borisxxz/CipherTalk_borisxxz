@@ -150,7 +150,7 @@ const detectImageMime = (buf: Buffer, fallback: string = 'image/jpeg') => {
 export const isVideoUrl = (url: string) => {
     if (!url) return false
     if (url.includes('vweixinthumb')) return false
-    return url.includes('snsvideodownload') || url.includes('video') || url.includes('.mp4')
+    return url.includes('snsvideodownload') || url.includes('stodownload') || url.includes('video') || url.includes('.mp4')
 }
 
 // 从XML中提取视频密钥
@@ -953,6 +953,23 @@ class SnsService {
         return false
     }
 
+    private getSafeUrlDiagnostics(url: string): { host: string; path: string; queryKeys: string[] } {
+        try {
+            const parsed = new URL(url)
+            return {
+                host: parsed.hostname,
+                path: parsed.pathname.slice(0, 180),
+                queryKeys: Array.from(parsed.searchParams.keys()).slice(0, 16)
+            }
+        } catch {
+            return {
+                host: '',
+                path: String(url || '').split('?')[0].slice(0, 180),
+                queryKeys: []
+            }
+        }
+    }
+
     /** 根据图片头返回扩展名 */
     private getImageExtFromBuffer(buf: Buffer): string {
         if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return '.gif'
@@ -1369,8 +1386,10 @@ class SnsService {
                         path: urlObj.pathname + urlObj.search,
                         method: 'GET',
                         headers: {
-                            'User-Agent': 'MicroMessenger Client',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) WindowsWechat(0x63090719) XWEB/8351',
                             'Accept': '*/*',
+                            'Referer': 'https://servicewechat.com/',
+                            'Origin': 'https://servicewechat.com',
                             'Connection': 'keep-alive'
                         },
                         rejectUnauthorized: false
@@ -1405,14 +1424,12 @@ class SnsService {
                                             keystream = await wasmService.getKeystream(keyText, 131072)
                                         } catch (wasmErr) {
                                             // 打包漏带 wasm 或 wasm 初始化异常时，回退到纯 TS ISAAC64
+                                            // 匹配 WASM 路径: generateKeystreamBE → reverse
                                             const isaac = new Isaac64(keyText)
-
-                                            // 对齐到 8 字节，然后 reverse
                                             const alignSize = Math.ceil(131072 / 8) * 8
-                                            const alignedKeystream = isaac.generateKeystreamBE(alignSize)
-                                            const reversed = Buffer.from(alignedKeystream)
-                                            reversed.reverse()
-                                            keystream = reversed.subarray(0, 131072)
+                                            const aligned = isaac.generateKeystreamBE(alignSize)
+                                            aligned.reverse()
+                                            keystream = aligned.subarray(0, 131072)
                                         }
 
                                         const decryptLen = Math.min(keystream.length, raw.length)
@@ -1467,10 +1484,11 @@ class SnsService {
                     path: urlObj.pathname + urlObj.search,
                     method: 'GET',
                     headers: {
-                        'User-Agent': 'MicroMessenger Client',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) WindowsWechat(0x63090719) XWEB/8351',
                         'Accept': '*/*',
                         'Accept-Encoding': 'gzip, deflate, br',
                         'Accept-Language': 'zh-CN,zh;q=0.9',
+                        'Referer': 'https://servicewechat.com/',
                         'Connection': 'keep-alive'
                     },
                     rejectUnauthorized: false
@@ -1497,35 +1515,45 @@ class SnsService {
                         const xEnc = String(res.headers['x-enc'] || '').trim()
 
                         let decoded = raw
+                        const rawIsValidImage = this.isValidImageBuffer(raw)
 
                         // 图片逻辑
                         const keyText = key === undefined || key === null ? '' : String(key).trim()
-                        const shouldDecrypt = (xEnc === '1' || !!key) && keyText.length > 0 && keyText !== '0'
+                        const keyIsUsable = keyText.length > 0 && keyText !== '0'
+                        const keyIsNumeric = /^\d+$/.test(keyText)
+                        const shouldDecrypt = !rawIsValidImage && (xEnc === '1' || !!key) && keyIsUsable
+                        const diagnostics = {
+                            ...this.getSafeUrlDiagnostics(url),
+                            statusCode: res.statusCode,
+                            contentType: String(res.headers['content-type'] || ''),
+                            contentEncoding: String(res.headers['content-encoding'] || ''),
+                            xEnc,
+                            rawBytes: raw.length,
+                            rawHeadHex: raw.subarray(0, 8).toString('hex'),
+                            rawIsValidImage,
+                            hasKey: keyIsUsable,
+                            keyIsNumeric,
+                            attemptedDecrypt: shouldDecrypt,
+                            hasMd5: !!md5
+                        }
                         if (shouldDecrypt) {
                             try {
                                 const keyStr = keyText
-                                if (/^\d+$/.test(keyStr)) {
+                                if (keyIsNumeric) {
                                     let keystream: Buffer
 
                                     try {
                                         // 优先使用 WASM 版本的 Isaac64 解密图片
-                                        // 修正逻辑：使用带 reverse 且修正了 8字节对齐偏移的 getKeystream
                                         const wasmService = WasmService.getInstance()
                                         keystream = await wasmService.getKeystream(keyStr, raw.length)
                                     } catch (wasmErr) {
                                         // Fallback：使用纯 TypeScript 的 Isaac64
+                                        // 匹配 WASM 路径: generateKeystreamBE → reverse
                                         const isaac = new Isaac64(keyStr)
-
-                                        // 需要对齐到 8 字节边界，然后 reverse，和 WASM 版本保持一致
                                         const alignSize = Math.ceil(raw.length / 8) * 8
-                                        const alignedKeystream = isaac.generateKeystreamBE(alignSize)
-
-                                        // Reverse 整个 buffer
-                                        const reversed = Buffer.from(alignedKeystream)
-                                        reversed.reverse()
-
-                                        // 取前 raw.length 字节
-                                        keystream = reversed.subarray(0, raw.length)
+                                        const aligned = isaac.generateKeystreamBE(alignSize)
+                                        aligned.reverse()
+                                        keystream = aligned.subarray(0, raw.length)
                                     }
 
                                     const decrypted = Buffer.allocUnsafe(raw.length)
@@ -1536,14 +1564,34 @@ class SnsService {
                                     decoded = decrypted
 
                                     // 验证解密结果
-                                    const mime = detectImageMime(decoded)
+                                    const mime = detectImageMime(decoded, 'application/octet-stream')
                                     if (!mime.startsWith('image/')) {
-                                        console.warn('[SnsService] ✗ 图片解密失败，文件头:', decoded.subarray(0, 8).toString('hex'))
+                                        console.warn('[SnsService] ✗ 图片解密失败', {
+                                            ...diagnostics,
+                                            decodedHeadHex: decoded.subarray(0, 8).toString('hex'),
+                                            detectedMime: mime
+                                        })
+                                        resolve({ success: false, error: '图片解密失败：文件头无效' })
+                                        return
                                     }
                                 }
                             } catch (e) {
-                                console.error('[SnsService] 图片解密失败:', e)
+                                console.error('[SnsService] 图片解密失败:', {
+                                    ...diagnostics,
+                                    error: e instanceof Error ? e.message : String(e)
+                                })
+                                resolve({ success: false, error: e instanceof Error ? e.message : '图片解密失败' })
+                                return
                             }
+                        }
+
+                        if (!this.isValidImageBuffer(decoded)) {
+                            console.warn('[SnsService] 图片数据无效', {
+                                ...diagnostics,
+                                decodedHeadHex: decoded.subarray(0, 8).toString('hex')
+                            })
+                            resolve({ success: false, error: '图片数据无效' })
+                            return
                         }
 
                         try {

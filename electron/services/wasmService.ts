@@ -146,17 +146,15 @@ export class WasmService {
     }
 
     public async getKeystream(key: string, size: number = 131072): Promise<Buffer> {
-        // ISAAC-64 uses 8-byte blocks. If size is not a multiple of 8,
-        // the global reverse() will cause a shift in alignment.
+        // Match WeChatDataAnalysis / WeFlow: align to 8-byte boundary, reverse entire buffer.
+        // WASM outputs 64-bit ISAAC values in native LE; full-buffer reverse produces
+        // BE blocks in reverse index order, which matches WeChat's decryption behavior.
         const alignSize = Math.ceil(size / 8) * 8;
         const buffer = await this.getRawKeystream(key, alignSize);
 
-        // Reverse the entire aligned buffer
         const reversed = new Uint8Array(buffer);
         reversed.reverse();
 
-        // Return exactly the requested size from the beginning of the reversed stream.
-        // Since we reversed the 'aligned' buffer, index 0 is the last byte of the last block.
         return Buffer.from(reversed).subarray(0, size);
     }
 
