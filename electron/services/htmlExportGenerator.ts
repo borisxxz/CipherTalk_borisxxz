@@ -920,7 +920,15 @@ a > .wx-card:hover { opacity: 0.85; }
 
     /* 文件 */
     var fileMatch = content.match(/^\\[\\u6587\\u4EF6\\]\\s+(.+)$/);
-    if (fileMatch) return '<div class="wx-card"><div class="wx-card-left">\\u{1F4C4}</div><div class="wx-card-right"><div class="wx-card-title">'+esc(fileMatch[1])+'</div><div class="wx-card-footer">\\u{1F4CE} \\u6587\\u4EF6</div></div></div>';
+    if (fileMatch) {
+      var rest = fileMatch[1];
+      var pm = rest.match(/^(.+?)\\s+(files\\/[^\\s]+)$/);
+      if (pm) {
+        var fname = pm[1], fpath = pm[2];
+        return '<a class="wx-card" href="'+esc(fpath)+'" download><div class="wx-card-left">\\u{1F4C4}</div><div class="wx-card-right"><div class="wx-card-title">'+esc(fname)+'</div><div class="wx-card-footer">\\u{1F4CE} \\u6587\\u4EF6 \\u00B7 \\u70B9\\u51FB\\u4E0B\\u8F7D</div></div></a>';
+      }
+      return '<div class="wx-card"><div class="wx-card-left">\\u{1F4C4}</div><div class="wx-card-right"><div class="wx-card-title">'+esc(rest)+'</div><div class="wx-card-footer">\\u{1F4CE} \\u6587\\u4EF6</div></div></div>';
+    }
 
     /* 位置 - 提取坐标生成地图链接 */
     var locMatch = content.match(/^\\[\\u4F4D\\u7F6E\\]\\s+(.+)$/);

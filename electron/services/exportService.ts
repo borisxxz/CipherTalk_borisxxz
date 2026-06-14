@@ -12,6 +12,8 @@ import { videoService } from './videoService'
 import { dbAdapter } from './dbAdapter'
 import { findMessageDbPaths, findDbByName, getDbStoragePath } from './dbStoragePaths'
 import { snsService, isVideoUrl, type SnsPost, type SnsShareInfo } from './snsService'
+import { fileResolveService } from './fileResolveService'
+import { parseFileInfo } from './chat/contentParsers'
 
 // ChatLab 0.0.2 格式类型定义
 export interface ChatLabHeader {
@@ -94,6 +96,7 @@ export interface ExportOptions {
   exportVideos?: boolean
   exportEmojis?: boolean
   exportVoices?: boolean
+  exportFiles?: boolean
   autoTranscribeVoice?: boolean
   mediaPathMap?: Map<number, string>
   // 语音独立映射表：同一秒可能存在多条语音，必须按 localId 索引
@@ -523,7 +526,13 @@ class ExportService {
     const isAppMsgXml = /<appmsg[\s\S]*?>/i.test(content)
 
     if (xmlType && isAppMsgXml) {
-      return this.parseType49(content)
+      const result = this.parseType49(content)
+      // 文件消息且已导出 → 解码 title 中的 HTML 实体（&#x20; 等），追加相对路径
+      if (result && result.startsWith('[文件]') && mediaPathMap && createTime && mediaPathMap.has(createTime)) {
+        const decoded = this.decodeHtmlEntities(result)
+        return `${decoded} ${mediaPathMap.get(createTime)}`
+      }
+      return result
     }
 
     switch (localType) {
@@ -2507,7 +2516,7 @@ class ExportService {
         else if (options.format === 'sql') ext = '.sql'
 
         // 当导出媒体时，创建会话子文件夹，把文件和媒体都放进去
-        const hasMedia = options.exportImages || options.exportVideos || options.exportEmojis || options.exportVoices
+        const hasMedia = options.exportImages || options.exportVideos || options.exportEmojis || options.exportVoices || options.exportFiles
         const sessionOutputDir = hasMedia ? path.join(outputDir, safeName) : outputDir
         if (hasMedia && !fs.existsSync(sessionOutputDir)) {
           fs.mkdirSync(sessionOutputDir, { recursive: true })
@@ -3155,6 +3164,7 @@ class ExportService {
     const imageOutDir = options.exportImages ? path.join(outputDir, 'images') : ''
     const videoOutDir = options.exportVideos ? path.join(outputDir, 'videos') : ''
     const emojiOutDir = options.exportEmojis ? path.join(outputDir, 'emojis') : ''
+    const fileOutDir = options.exportFiles ? path.join(outputDir, 'files') : ''
 
     if (options.exportImages && !fs.existsSync(imageOutDir)) {
       fs.mkdirSync(imageOutDir, { recursive: true })
@@ -3164,6 +3174,9 @@ class ExportService {
     }
     if (options.exportEmojis && !fs.existsSync(emojiOutDir)) {
       fs.mkdirSync(emojiOutDir, { recursive: true })
+    }
+    if (options.exportFiles && !fs.existsSync(fileOutDir)) {
+      fs.mkdirSync(fileOutDir, { recursive: true })
     }
 
     let imageCount = 0
@@ -3175,8 +3188,12 @@ class ExportService {
     let videoMissCount = 0
     const missedImages: Array<{ createTime: number; sender: string }> = []
 
+    let fileCount = 0
+    let fileResolvedCount = 0
+    let fileMissCount = 0
+
     // 是否需要处理图片/视频/表情
-    const needMedia = options.exportImages || options.exportVideos || options.exportEmojis
+    const needMedia = options.exportImages || options.exportVideos || options.exportEmojis || options.exportFiles
 
     // 图片/视频/表情循环（语音在后面独立处理）
     if (needMedia) {
@@ -3363,12 +3380,54 @@ class ExportService {
                 // 跳过单个表情的错误
               }
             }
+
+            // 导出文件附件（appmsg type=6：Word/zip/PDF 等）
+            // 微信 4.0 的 localType 可能是 49 或带标志位的大数值（如 0x7D0_0000_0031），
+            // 低 16 位才是真正的类型，用掩码识别以兼容两者
+            if (options.exportFiles && (localType & 0xFFFF) === 49) {
+              fileCount++
+              try {
+                const info = parseFileInfo(content)
+                if (info.fileName) {
+                  const resolved = await fileResolveService.resolveFileAttachment({
+                    fileName: info.fileName,
+                    fileMd5: info.fileMd5,
+                    fileSize: info.fileSize,
+                    createTime
+                  })
+                  if (resolved && fs.existsSync(resolved.localPath)) {
+                    // 文件名净化：路径非法字符 + 空格（空格会破坏 HTML 路径解析），显示标题另用原文
+                    const safeName = info.fileName.replace(/[\\/:*?"<>|\s]/g, '_')
+                    const df = this.dateFolder(createTime)
+                    const dayDir = path.join(fileOutDir, df)
+                    if (!fs.existsSync(dayDir)) fs.mkdirSync(dayDir, { recursive: true })
+                    const destName = `${createTime}_${safeName}`
+                    const destPath = path.join(dayDir, destName)
+                    if (!fs.existsSync(destPath)) {
+                      fs.copyFileSync(resolved.localPath, destPath)
+                    }
+                    mediaPathMap.set(createTime, `files/${df}/${destName}`)
+                    fileResolvedCount++
+                  } else {
+                    fileMissCount++
+                    console.log(`[Export][文件] 未找到本地文件: ${info.fileName} (md5=${info.fileMd5 || '无'}, size=${info.fileSize || '未知'})`)
+                  }
+                }
+              } catch (e) {
+                // 跳过单个文件的错误
+                console.warn(`[Export][文件] 处理出错:`, e instanceof Error ? e.message : e)
+              }
+            }
           }
         } catch (e) {
           // 跳过单行消息的错误
         }
       }
     } // 结束 needMedia
+
+    if (options.exportFiles) {
+      console.log(`[Export][文件] 文件附件导出: 共 ${fileCount} 条, 成功 ${fileResolvedCount}, 未找到 ${fileMissCount}`)
+    }
 
     // === 语音导出（独立流程：需要从 MediaDb 读取） ===
     let voiceCount = 0

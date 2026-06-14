@@ -34,6 +34,7 @@ interface ExportOptions {
   exportVideos: boolean
   exportEmojis: boolean
   exportVoices: boolean
+  exportFiles: boolean
   autoTranscribeVoice: boolean
 }
 
@@ -116,6 +117,7 @@ function ExportPage() {
     exportVideos: false,
     exportEmojis: false,
     exportVoices: false,
+    exportFiles: false,
     autoTranscribeVoice: false
   })
 
@@ -518,6 +520,7 @@ function ExportPage() {
         exportVideos: !options.exportVideos,
         exportEmojis: !options.exportEmojis,
         exportVoices: !options.exportVoices,
+        exportFiles: !options.exportFiles,
         autoTranscribeVoice: options.autoTranscribeVoice
       }
 
@@ -839,6 +842,16 @@ function ExportPage() {
                     <div className="custom-checkbox"></div>
                     <Mic size={16} style={{ color: 'var(--text-tertiary)' }} />
                     <span>排除语音</span>
+                  </label>
+                  <label className="checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={options.exportFiles}
+                      onChange={e => setOptions(prev => ({ ...prev, exportFiles: e.target.checked }))}
+                    />
+                    <div className="custom-checkbox"></div>
+                    <FileText size={16} style={{ color: 'var(--text-tertiary)' }} />
+                    <span>排除文件</span>
                   </label>
                   <label className="checkbox-item">
                     <input
@@ -1237,6 +1250,7 @@ function ExportPage() {
               {options.exportVideos && <span> · 排除视频</span>}
               {options.exportEmojis && <span> · 排除表情</span>}
               {options.exportVoices && <span> · 排除语音</span>}
+              {options.exportFiles && <span> · 排除文件</span>}
               {options.autoTranscribeVoice && <span> · 自动转文字</span>}
               {options.exportAvatars && <span> · 含头像</span>}
             </div>

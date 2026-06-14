@@ -359,8 +359,8 @@ export function parseFileInfo(content: string): { fileName?: string; fileSize?: 
     const type = extractXmlValue(content, 'type')
     if (type !== '6') return {}
 
-    // 提取文件名 (title)
-    const fileName = extractXmlValue(content, 'title')
+    // 提取文件名 (title)，解码 HTML 实体（如 &#x20; 空格、&amp; 等）以匹配磁盘真实文件名
+    const fileName = decodeHtmlEntities(extractXmlValue(content, 'title'))
 
     // 提取文件大小 (totallen)
     const totallenStr = extractXmlValue(content, 'totallen')

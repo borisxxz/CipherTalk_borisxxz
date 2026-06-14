@@ -1548,6 +1548,7 @@ export interface ExportOptions {
   exportVideos?: boolean
   exportEmojis?: boolean
   exportVoices?: boolean
+  exportFiles?: boolean
   autoTranscribeVoice?: boolean
 }
 
