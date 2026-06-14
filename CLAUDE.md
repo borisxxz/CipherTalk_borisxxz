@@ -63,3 +63,22 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+---
+
+## 项目工作流：同步远程仓库
+
+WSL 环境没有 Git 凭证，直接 `git push` 会失败（GitHub SSH permission denied、CNB 无法读取用户名）。凭证在 Windows 侧。
+
+**每次处理完、需要同步远程时，不要在 WSL 里 push**，而是把以下命令交给用户在 Windows 终端（cmd/PowerShell，项目目录 `D:\tem\CipherTalk`）里执行：
+
+```bash
+git push origin main
+git push cnb main
+```
+
+两个远程：
+- `origin` → `github.com:borisxxz/CipherTalk_borisxxz.git`
+- `cnb` → `cnb.cool/boris007/CipherTalk_self.git`
+
+默认分支：`main`
